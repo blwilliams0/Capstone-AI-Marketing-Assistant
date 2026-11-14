@@ -12,7 +12,7 @@ Last updated: 2026-11-13 (end of the overnight coding run). Labels: *working in 
 | `6999f54` | M0 docs: strategy files, PRD v0.4, architecture addendum v0.4, brand interview guide, decisions |
 | `3c4c346` | M0 code: sign-in recovery (expired-link message, "email me a sign-in link", set-password), staff screen, rate limiting, page routing |
 | `1bab401` | M1: knowledge library (approval, immutable versions, brand core, full-text search) + strategy and research notes loaded as proposals |
-| *(M2 commit)* | M2 on the mock AI: Claude provider, tiered context, cited answers, post drafting, AI usage and budget, Ask and Create-a-post screens |
+| `be58c2f` | M2 on the mock AI: Claude provider, tiered context, cited answers, post drafting, AI usage and budget, Ask and Create-a-post screens |
 
 **Tests:** 134 passing (shared 7, db 32, api 88, worker 7). Build, strict typecheck, lint and bundle secret scan clean. Live dev database: migrations 001–004 applied; 14 tables, all with RLS; no public access to any table, function or sequence (TEST_LOG §6).
 
