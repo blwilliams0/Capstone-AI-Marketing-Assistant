@@ -2,6 +2,25 @@
 
 Product-owner decisions and technical decisions affecting the project. Newest first.
 
+## 2026-11-13: Design audit and V1 plan (owner decisions)
+
+Recorded in full in `The_Pocket_AI_Marketing_Assistant_PRD_v0_4.md` and `The_Pocket_AI_Architecture_Addendum_v0_4.md`.
+
+| Decision | Choice |
+|---|---|
+| Schedule | Prototype **Nov 23** (laptop demo); finished about **Dec 10** |
+| Coding agent | Qwen is no longer used. Claude Code writes all code (Fable, Opus and Sonnet used for different work) |
+| Application AI | **Claude Opus 5.5** for all tasks via the Anthropic API. Replaces Qwen Flash/Plus |
+| Retrieval | **No embeddings, pgvector or AWS in V1.** Always-included approved brand core (cached, size-capped) plus relevant approved sections found by Postgres full-text search. Supersedes the Bedrock Titan embedding decision and resolves the earlier embedding conflict |
+| Why not "send everything" | Prompt caching only cuts the cost of identical repeated prefixes; at low traffic most requests miss the cache, any library change resets it, and irrelevant context lowers answer quality |
+| Publishing | **Assisted manual posting** in V1; Instagram/Facebook API publishing is later |
+| Self-approval | **Administrators (Mike, Elliot) may approve their own work** with explicit confirmation, audited. Approvers and contributors may not. Resolves open decision 2 below |
+| AI billing | Anthropic Console API key: owner's account for development, restaurant's own account at handoff, with a spend limit. A Claude Pro subscription cannot be used (no API access) |
+| Brand interview | Guide written now (`docs/strategy/BRAND_INTERVIEW_GUIDE.md`); interview may happen before or after the prototype |
+| Marketing strategy | Team draft recorded in `docs/strategy/`; loaded into the app as a draft until management approves it |
+| Commits | Local commits per milestone allowed; no push without the owner's permission |
+| Retired open decisions | #1 embedding model (no embeddings in V1), #2 self-approval (above) |
+
 ## 2026-11-08: Stage 1 remediation (owner decisions)
 
 | Decision | Choice | Why |

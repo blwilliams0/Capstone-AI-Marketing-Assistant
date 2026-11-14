@@ -9,7 +9,12 @@ Required by the architecture specification (section 13) and CSUMB course AI-use 
 | ChatGPT | Requirements, architecture and product design; review | Helped draft the PRD, architecture and instructions in the four `The_Pocket_*.md` files. |
 | Qwen Code | Initial implementation (Stage 1, first pass, 2026-11-04) | Created the first monorepo files. Its work did not install, compile or run; much of it was corrupted by PowerShell file-writing. Its own report claimed completion, which testing did not support. |
 | Codex | Independent review | An audit was mentioned in the project brief. **No Codex audit file was found in the repository.** *Owner to provide it if one exists.* |
-| Claude Code (Claude Sonnet 5.5 and Opus 5.5) | Stage 1 inspection and remediation (2026-11-08) | Verified the first pass, rebuilt the broken parts, added tests and wrote the remediation documents. |
+| Claude Code (Claude Sonnet 5.5 and Opus 5.5) | Stage 1 inspection and remediation (2026-11-08 to 11-09) | Verified the first pass, rebuilt the broken parts, added tests and wrote the remediation documents. |
+| Claude Code (Claude Fable 5.2, Opus 5.5, Sonnet 5.5) | Sole coding agent from 2026-11-13 | Design audit and V1 plan (Fable); PRD v0.4, architecture addendum, interview guide and all further implementation under the owner's direction. Qwen is no longer used. |
+
+**Formatting of team documents:** On 2026-11-13 Claude Code reformatted the team's strategy material into `docs/strategy/` (headings, lists and tables rebuilt from a flattened paste). The wording is the team's; authorship of each version is labelled in `docs/strategy/STRATEGY_HISTORY.md`, including the version an AI tool drafted from Nick's work.
+
+**The app's own AI:** From V1 the application calls Claude Opus 5.5 at runtime. This is part of the product, separate from the tools used to write the code.
 
 ## Human contributions
 

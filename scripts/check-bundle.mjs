@@ -16,7 +16,8 @@ const files = [];
 
 const forbidden = [
   [/sb_secret_[A-Za-z0-9_-]{8,}/, 'a Supabase secret key'],
-  [/SUPABASE_SECRET_KEY|DATABASE_URL|SESSION_SECRET/, 'a server-only variable name'],
+  [/sk-ant-[A-Za-z0-9_-]{8,}/, 'an Anthropic API key'],
+  [/SUPABASE_SECRET_KEY|DATABASE_URL|SESSION_SECRET|ANTHROPIC_API_KEY/, 'a server-only variable name'],
   [/postgres(ql)?:\/\/[^"'\s]+/, 'a database connection string'],
   [/service_role/, 'a service-role reference'],
   [/Developer mock sign-in/, 'the development-only mock sign-in'],
