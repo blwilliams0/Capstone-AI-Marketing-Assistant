@@ -1,3 +1,7 @@
+> **SUPERSEDED (2026-11-08).** This is the original report written by Qwen Code on 2026-11-04, kept unchanged below as part of the project record. Its claim that Stage 1 was complete was **not accurate**: the code did not install, compile or run, and its authentication was mock-only with no production guard. See [STAGE1_REMEDIATION_REPORT.md](STAGE1_REMEDIATION_REPORT.md) for what is actually true. Some text below also has damaged formatting caused by PowerShell file-writing.
+
+---
+
 # The Pocket AI Marketing Assistant - Stage 1 Completion Report
 
 ## Summary

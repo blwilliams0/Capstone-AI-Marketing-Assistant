@@ -1,148 +1,94 @@
 # The Pocket AI Marketing Assistant
 
-A browser-based AI marketing assistant for The Pocket restaurant in Carmel-by-the-Sea.
+A browser-based AI marketing assistant for The Pocket, a restaurant in Carmel-by-the-Sea. Management controls the brand; the assistant helps staff carry out the approved strategy. This is a CSUMB Strategic Management capstone project built for a real client.
 
-## Architecture Overview
+**Current status: Stage 1 (software foundation) repaired and verified in an offline test environment. Stage 2 has not been started.** See [docs/STATUS.md](docs/STATUS.md) for an honest list of what works, what needs credentials, and what is deferred.
 
-This is a monorepo with the following structure:
+## What exists today
 
-`
-apps/
-??? api/        # Express REST API server
-??? web/        # React web application
-??? worker/     # Background job processor
-packages/
-??? shared/     # Shared types and utilities
-db/
-??? migrations/ # PostgreSQL database migrations
-`
+- Secure API that verifies Supabase sign-in tokens and looks up each person's role in the database.
+- Four roles (administrator, approver, contributor, viewer) enforced by the server on every route.
+- Staff invitations and access removal, with an append-only audit trail.
+- Database foundation with row-level security on every table.
+- A background worker foundation (durable job queue with leases, retries and duplicate prevention). It can only run a harmless test job; it cannot publish anything.
+- A basic browser app: sign in, set a password from an invitation, and see your role.
+- Mock AI and mock social-media providers for development. No real AI or social account is contacted.
 
-## Technology Stack
+## Layout
 
-- **Runtime:** Node.js 24 LTS
-- **Language:** TypeScript
-- **Database:** Supabase PostgreSQL with pgvector
-- **Authentication:** Supabase Auth
-- **Storage:** Supabase Storage
-- **Frontend:** React 19 + Vite + TypeScript + Tailwind CSS
-- **API:** Express REST with Zod validation
-- **AI:** Qwen 3.8-Flash, Qwen 3.7-Plus (US-scoped)
-- **Embeddings:** AWS Bedrock Titan Text Embeddings V2 (1024 dimensions)
+```text
+apps/api/        Express REST API
+apps/web/        React + Vite + Tailwind browser app
+apps/worker/     Background job worker
+packages/shared/ Roles and permissions shared by all apps (single source of truth)
+packages/db/     Database access, migration runner, job queue
+db/migrations/   SQL migrations
+scripts/         Maintenance scripts (bundle secret check)
+docs/            Documentation
+```
 
-## Prerequisites
+## Requirements
 
-- Node.js 24 LTS or higher
-- pnpm (recommended) or npm
-- Supabase account (https://supabase.com)
-- Optional: Alibaba Cloud Model Studio account for Qwen API
-- Optional: AWS account for Bedrock embeddings
+- Node.js 24 or newer. npm (included with Node) is the package manager.
+- A Supabase project (already created for development) for real sign-in.
 
-## Installation
+## Quick start (offline, no Supabase needed)
 
-`ash
-# Clone the repository
-git clone <your-repo-url>
-cd <your-project>
+```bash
+npm install
+npm run build
+npm test            # 78 tests; uses an in-process Postgres, no internet or accounts needed
+```
 
-# Install dependencies
-pnpm install
+## Run locally with mock sign-in (development only)
 
-# Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your configuration
-`
+1. Copy `.env.example` to `.env.local`.
+2. Set `AUTH_MODE=mock` and `NODE_ENV=development`.
+3. In two terminals: `npm run dev:api` and `npm run dev:web`.
+4. Open http://localhost:5173 and use the yellow developer box to pick a role.
 
-## Development
+Mock mode needs no password and is refused by the API unless `NODE_ENV` is `development` or `test`. It only supports read-only checks (your role and permissions). Features that write to the database, such as invitations, need a real database and real sign-in.
 
-### Start all services
-`ash
-pnpm dev
-`
+## Run with real Supabase sign-in
 
-### Start individual services
-`ash
-pnpm dev:api    # Start API server on port 3000
-pnpm dev:web    # Start React app on port 5173
-pnpm dev:worker # Start background worker
-`
+Needs two server-only values in `.env.local` in addition to the URL and publishable key: `DATABASE_URL` and `SUPABASE_SECRET_KEY`. Then:
 
-### Run tests
-`ash
-pnpm test
-`
+```bash
+npm run db:migrate                                              # create the tables
+npm run bootstrap-admin -- --email you@example.com --name "Your Name"   # invite the first administrator
+npm run dev:api
+npm run dev:web
+```
 
-### Run linter
-`ash
-pnpm lint
-`
+Open the invitation email, set a password, and sign in. The Supabase project must use asymmetric JWT signing keys (the current default for new projects); see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-### Format code
-`ash
-pnpm format
-`
+## Commands
 
-## Database Migrations
+| Command | What it does |
+|---|---|
+| `npm run build` | Build every package |
+| `npm run typecheck` | Strict TypeScript check, including tests |
+| `npm run lint` | ESLint |
+| `npm test` | All automated tests |
+| `npm run check:bundle` | Confirm the built web app contains no server secrets |
+| `npm run db:migrate` | Apply database migrations |
+| `npm run bootstrap-admin -- ...` | Invite the first administrator |
 
-`ash
-# Apply migrations
-pnpm db:migrate
+## Security rules
 
-# Generate new migration
-pnpm db:generate
-`
+- `.env.local` is git-ignored. Never commit secrets.
+- `SUPABASE_SECRET_KEY` and `DATABASE_URL` are server-only. The web build only receives an explicit allowlist of public values, and `npm run check:bundle` verifies it.
+- The browser showing or hiding buttons is not security. The API checks permissions on every request.
+- AI never approves or publishes anything. Nothing posts to a real social account.
 
-## Configuration
+## Documentation
 
-See .env.example for all configuration options:
+- [docs/STATUS.md](docs/STATUS.md) feature status
+- [docs/API.md](docs/API.md) API routes and permissions
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) deployment notes
+- [docs/DECISIONS.md](docs/DECISIONS.md) decisions and open spec conflicts
+- [docs/STAGE1_REMEDIATION_PLAN.md](docs/STAGE1_REMEDIATION_PLAN.md) and [docs/STAGE1_REMEDIATION_REPORT.md](docs/STAGE1_REMEDIATION_REPORT.md)
+- [docs/TEST_LOG.md](docs/TEST_LOG.md) real test output
+- [docs/AI_ASSISTANCE.md](docs/AI_ASSISTANCE.md) who and what built this
 
-- **Supabase:** Project URL, anon key, service role key
-- **Qwen API:** API key, base URL
-- **AWS:** Access key, secret key, region
-- **Application:** Port, environment, session settings
-
-## Security
-
-- Never commit .env.local files
-- Never store API keys in source code
-- Use environment variables for all secrets
-- Review and approve all AI-generated content before publishing
-- Enable spending limits on all external services
-
-## Deployment
-
-See docs/DEPLOYMENT.md for deployment instructions.
-
-## Development Status
-
-See docs/STATUS.md for current feature status.
-
-## Support
-
-Contact the technical maintainer for issues and questions.
-
-## Stage 1 Implementation Summary
-
-Stage 1 (Foundation) is complete. See docs/IMPLEMENTATION_SUMMARY.md for details.
-
-### What's Working
-
-- Monorepo structure with Turbo
-- Express REST API with middleware
-- Mock Qwen and social publishing
-- React web app with login
-- Database migrations ready
-- RBAC with 4 role tiers
-
-### What Requires Configuration
-
-- Supabase connection
-- Qwen API credentials
-- AWS Bedrock credentials
-- Real social OAuth flow
-
-### Known Limitations
-
-1. Authentication is mock-only
-2. Database requires Supabase connection
-3. AI API is mocked
-4. Social publishing is mocked
+The product specification lives in the four `The_Pocket_*.md` files in the repository root.

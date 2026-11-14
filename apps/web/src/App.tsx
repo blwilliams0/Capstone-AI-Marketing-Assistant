@@ -1,174 +1,171 @@
-import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useAuth } from './hooks/useAuth';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { ROLE_DESCRIPTIONS, ROLES, type Role } from '@the-pocket/shared';
+import { useAuth } from './auth';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000, // 1 minute
-    },
-  },
-});
+const CAPABILITY_LABELS: Record<string, string> = {
+  'knowledge.view': 'Read approved marketing material',
+  'analytics.view': 'See marketing reports',
+  'content.draft': 'Draft marketing content',
+  'approval.request': 'Submit drafts for review',
+  'data.import': 'Import sales and reservation reports',
+  'post.approve': 'Approve marketing posts',
+  'brand.approve': 'Approve brand rules',
+  'channel.connect': 'Connect social media accounts',
+  'users.invite': 'Invite staff',
+  'users.manage': 'Change or remove staff access',
+  'data.export': 'Export data',
+  'analytics.view_sensitive': 'See sensitive reports',
+  'audit.view': 'See the activity history',
+};
 
-const Login = () => {
-  const { login } = useAuth();
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'approver' | 'contributor' | 'viewer'>('contributor');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    login({
-      id: 'user-' + Date.now(),
-      email: email || 'user@example.com',
-      name: 'Test User',
-      role: role,
-    });
-  };
-
+function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-2xl font-bold text-center mb-6">The Pocket AI Marketing Assistant</h1>
-        <p className="text-gray-600 mb-6 text-center">Development Mode - Mock Authentication</p>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="user@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as any)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="viewer">Viewer - Read only</option>
-              <option value="contributor">Contributor - Can draft content</option>
-              <option value="approver">Approver - Can approve content</option>
-              <option value="admin">Admin - Full access</option>
-            </select>
-          </div>
-
-          <button
-            type="submit"
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            Login
-          </button>
-        </form>
-
-        <div className="mt-4 text-xs text-gray-500 text-center">
-          <p>Use the form above to simulate different user roles.</p>
-          <p className="mt-1">In production, this would use Supabase Auth.</p>
-        </div>
+    <div className="min-h-screen bg-stone-50 text-stone-900">
+      <div className="mx-auto max-w-xl px-4 py-12">
+        <h1 className="mb-8 text-2xl font-semibold">The Pocket Marketing Assistant</h1>
+        {children}
       </div>
     </div>
   );
-};
+}
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+const inputClass = 'mt-1 block w-full rounded-md border border-stone-300 bg-white px-3 py-2';
+const buttonClass =
+  'w-full rounded-md bg-stone-900 px-4 py-2 font-medium text-white hover:bg-stone-700 disabled:opacity-50';
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+function SignIn() {
+  const { signIn, signInMock } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(await signIn(email, password));
+    setBusy(false);
   }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <>{children}</>;
-};
-
-const Home = () => {
-  const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">The Pocket AI Marketing Assistant</h1>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                {user.name} ({user.role})
-              </span>
-              <button
-                onClick={logout}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Logout
+    <Shell>
+      <form onSubmit={submit} className="space-y-4 rounded-lg bg-white p-6 shadow">
+        <h2 className="text-lg font-medium">Sign in</h2>
+        <label className="block text-sm font-medium">
+          Email
+          <input className={inputClass} type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <label className="block text-sm font-medium">
+          Password
+          <input className={inputClass} type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        <button className={buttonClass} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        <p className="text-sm text-stone-600">New here? Use the link in your invitation email to set your password.</p>
+      </form>
+      {__MOCK_AUTH__ && (
+        <div className="mt-6 rounded-lg border-2 border-dashed border-amber-500 bg-amber-50 p-4">
+          <p className="mb-2 text-sm font-medium text-amber-900">Developer mock sign-in (local development only)</p>
+          <div className="flex flex-wrap gap-2">
+            {ROLES.map((r: Role) => (
+              <button key={r} type="button" onClick={() => signInMock(r)} className="rounded border border-amber-600 px-3 py-1 text-sm">
+                {r}
               </button>
-            </div>
+            ))}
           </div>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {user.role === 'admin' && (
-            <div className="bg-white overflow-hidden shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900">Admin Dashboard</h3>
-              <p className="mt-1 text-sm text-gray-500">Manage users, brand knowledge, and system settings.</p>
-            </div>
-          )}
-          {['admin', 'approver'].includes(user.role) && (
-            <div className="bg-white overflow-hidden shadow rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900">Approvals</h3>
-              <p className="mt-1 text-sm text-gray-500">Review and approve marketing content.</p>
-            </div>
-          )}
-          <div className="bg-white overflow-hidden shadow rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900">Campaigns</h3>
-            <p className="mt-1 text-sm text-gray-500">Create and manage marketing campaigns.</p>
-          </div>
-          <div className="bg-white overflow-hidden shadow rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900">Knowledge Base</h3>
-            <p className="mt-1 text-sm text-gray-500">View and edit brand rules and verified facts.</p>
-          </div>
-        </div>
-
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="text-lg font-medium text-blue-900">System Status</h3>
-          <div className="mt-2 space-y-2 text-sm text-blue-700">
-            <p>? Development Mode - Mock Authentication</p>
-            <p>? No real AI API calls (mocked)</p>
-            <p>? No social media publishing (mocked)</p>
-            <p>? Database: Local/Development</p>
-          </div>
-        </div>
-      </main>
-    </div>
+      )}
+    </Shell>
   );
-};
+}
 
-const App = () => {
+function SetPassword() {
+  const { setPassword } = useAuth();
+  const [password, setPw] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(await setPassword(password));
+  }
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <Shell>
+      <form onSubmit={submit} className="space-y-4 rounded-lg bg-white p-6 shadow">
+        <h2 className="text-lg font-medium">Welcome! Choose your password</h2>
+        <label className="block text-sm font-medium">
+          New password (at least 12 characters)
+          <input className={inputClass} type="password" required minLength={12} autoComplete="new-password" value={password} onChange={(e) => setPw(e.target.value)} />
+        </label>
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        <button className={buttonClass}>Save password</button>
+      </form>
+    </Shell>
   );
-};
+}
 
-export default App;
+function Home() {
+  const { me, signOut, apiFetch } = useAuth();
+  const [health, setHealth] = useState<'checking' | 'ok' | 'down'>('checking');
+
+  useEffect(() => {
+    apiFetch('/health')
+      .then((r) => setHealth(r.ok ? 'ok' : 'down'))
+      .catch(() => setHealth('down'));
+  }, [apiFetch]);
+
+  if (!me) return null;
+  return (
+    <Shell>
+      <div className="space-y-6 rounded-lg bg-white p-6 shadow">
+        <div>
+          <p className="text-lg font-medium">Hello, {me.name}</p>
+          <p className="text-sm text-stone-600">{me.email}</p>
+        </div>
+        <div>
+          <p className="font-medium">Your access: {me.role}</p>
+          <p className="text-sm text-stone-600">{ROLE_DESCRIPTIONS[me.role]}</p>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
+            {me.capabilities.map((c) => (
+              <li key={c}>{CAPABILITY_LABELS[c] ?? c}</li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-stone-500">This list is for information. The server checks your permissions on every action.</p>
+        </div>
+        <p className="text-sm">
+          Server status:{' '}
+          <span className={health === 'ok' ? 'text-green-700' : health === 'down' ? 'text-red-700' : 'text-stone-500'}>
+            {health === 'ok' ? 'connected' : health === 'down' ? 'not reachable' : 'checking…'}
+          </span>
+        </p>
+        <button onClick={() => void signOut()} className="rounded-md border border-stone-300 px-4 py-2 text-sm hover:bg-stone-100">
+          Sign out
+        </button>
+      </div>
+    </Shell>
+  );
+}
+
+export default function App() {
+  const { status, message, signOut } = useAuth();
+  switch (status) {
+    case 'loading':
+      return <Shell><p>Loading…</p></Shell>;
+    case 'signed_out':
+      return <SignIn />;
+    case 'needs_password':
+      return <SetPassword />;
+    case 'no_access':
+    case 'error':
+      return (
+        <Shell>
+          <div className="space-y-4 rounded-lg bg-white p-6 shadow">
+            <p role="alert">{message ?? 'Something went wrong.'}</p>
+            <button onClick={() => void signOut()} className="rounded-md border border-stone-300 px-4 py-2 text-sm">Sign out</button>
+          </div>
+        </Shell>
+      );
+    case 'ready':
+      return <Home />;
+  }
+}

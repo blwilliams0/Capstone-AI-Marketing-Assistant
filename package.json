@@ -2,31 +2,31 @@
   "name": "the-pocket-ai-marketing-assistant",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Browser-based AI Marketing Assistant for The Pocket restaurant",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "turbo run dev --filter=\"!apps/worker\" --filter=\"!apps/web\"",
-    "dev:api": "turbo run dev --filter=apps/api",
-    "dev:web": "turbo run dev --filter=apps/web",
-    "dev:worker": "turbo run dev --filter=apps/worker",
+    "dev:api": "npm run dev -w @the-pocket/api",
+    "dev:web": "npm run dev -w @the-pocket/web",
+    "dev:worker": "npm run dev -w @the-pocket/worker",
     "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "eslint .",
     "test": "turbo run test",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "clean": "turbo run clean && rm -rf node_modules",
-    "db:migrate": "cd db/migrations && supabase db push"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,sql}\"",
+    "db:migrate": "npm run migrate -w @the-pocket/api",
+    "bootstrap-admin": "npm run bootstrap-admin -w @the-pocket/api --"
   },
   "devDependencies": {
-    "prettier": "^3.3.3",
-    "turbo": "^2.3.3",
-    "typescript": "^5.7.2"
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.0.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0"
   },
-  "engines": {
-    "node": ">=24.0.0",
-    "pnpm": ">=8.0.0"
-  },
-  "packageManager": "pnpm@8.0.0"
+  "engines": { "node": ">=24.0.0" },
+  "packageManager": "npm@11.12.1"
 }
