@@ -6,6 +6,7 @@ import { Card } from '../ui';
 
 export const CAPABILITY_LABELS: Record<string, string> = {
   'knowledge.view': 'Read approved marketing material',
+  'knowledge.propose': 'Suggest new brand rules, facts and documents',
   'analytics.view': 'See marketing reports',
   'content.draft': 'Draft marketing content',
   'approval.request': 'Submit drafts for review',

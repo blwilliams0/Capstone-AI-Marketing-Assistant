@@ -21,6 +21,12 @@ describe('permission matrix, enforced by the backend on every registered route',
         'post /admin/invitations',
         'post /admin/members/:id/revoke',
         'get /audit-events',
+        'get /knowledge',
+        'post /knowledge',
+        'post /knowledge/versions/:versionId/approve',
+        'post /knowledge/versions/:versionId/reject',
+        'post /knowledge/:itemId/retire',
+        'post /knowledge/:itemId/brand-core',
       ]),
     );
   });
@@ -28,7 +34,7 @@ describe('permission matrix, enforced by the backend on every registered route',
   it('every route denies roles lacking its capability and never denies roles that have it', async () => {
     for (const route of h.policies.routes) {
       for (const role of ROLES) {
-        const path = '/api' + route.path.replace(':id', 'not-a-uuid');
+        const path = '/api' + route.path.replace(/:\w+/g, 'not-a-uuid');
         // Empty body: authorized callers get a harmless 400/200 from validation, never a side effect.
         const res = await request(h.app)[route.method](path).set('Authorization', `Bearer ${tokens[role]}`).send({});
         const allowed = route.policy === 'member' || roleHas(role, route.policy);

@@ -12,6 +12,18 @@ Base URL in development: `http://localhost:3000`. All routes under `/api` requir
 | `POST /api/admin/invitations` | `users.invite` (admin) | Invite a person. Body: `{ email, name, role }`. Returns `201`. |
 | `POST /api/admin/members/:id/revoke` | `users.manage` (admin) | Remove someone's access. Body: `{ reason }`. Takes effect on their next request. The last active administrator cannot be removed (`409`). |
 | `GET /api/audit-events?limit=50` | `audit.view` (admin) | Recent activity history (limit 1 to 200). |
+| `GET /api/knowledge` | `knowledge.view` | The library. People who can propose also see pending proposals and retired items; viewers see only approved, current items. |
+| `GET /api/knowledge/brand-core` | `knowledge.view` | What the assistant always receives: approved, current, unexpired brand rules and facts marked for the core, with word count and limit. |
+| `GET /api/knowledge/search?q=...&limit=8` | `knowledge.view` | Full-text search over sections of approved, current content only. |
+| `GET /api/knowledge/:itemId` | `knowledge.view` | Version history (viewers: approved and superseded only). |
+| `POST /api/knowledge` | `knowledge.propose` | New item `{ kind, title, body, sourceNote?, expiresAt? }`. Always saved as a proposal. |
+| `POST /api/knowledge/:itemId/versions` | `knowledge.propose` | Propose a change `{ body, sourceNote?, expiresAt? }`. The approved version stays in use until the change is approved. |
+| `POST /api/knowledge/versions/:versionId/approve` | `brand.approve` (admin) | Approve exactly that version `{ note?, confirmSelfApproval? }`. Supersedes the previous approved version. Your own proposal needs `confirmSelfApproval: true` (409 otherwise) and is audited as self-approved. 409 if expired or the brand core would exceed its limit. |
+| `POST /api/knowledge/versions/:versionId/reject` | `brand.approve` (admin) | Reject `{ note }` (reason required). |
+| `POST /api/knowledge/:itemId/retire` | `brand.approve` (admin) | Stop using an item `{ reason }`. Cannot be undone. |
+| `POST /api/knowledge/:itemId/brand-core` | `brand.approve` (admin) | `{ inBrandCore }`. Only brand rules and facts. |
+
+All `/api` routes are rate limited (300 requests per 5 minutes per IP and per signed-in user; 429 with `Retry-After`).
 
 The old `/api/qwen/*` and `/api/social/*` routes from the first draft were removed. Publishing will never be a public HTTP endpoint; it will only happen in the worker after an approval is re-checked (Stage 4).
 
@@ -20,6 +32,7 @@ The old `/api/qwen/*` and `/api/social/*` routes from the first draft were remov
 | Permission | Admin | Approver | Contributor | Viewer |
 |---|:-:|:-:|:-:|:-:|
 | `knowledge.view`, `analytics.view` | yes | yes | yes | yes |
+| `knowledge.propose` | yes | yes | yes | no |
 | `content.draft` | yes | yes | yes | no |
 | `approval.request`, `data.import` | yes | no | yes | no |
 | `post.approve` | yes | yes | no | no |

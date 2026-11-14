@@ -69,6 +69,19 @@ describe('foundation migration', () => {
     }
   });
 
+  it('does not let public roles execute ANY function in the public schema', async () => {
+    const fns = await db.query<{ sig: string }>(
+      `SELECT p.oid::regprocedure::text AS sig FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public'`,
+    );
+    expect(fns.length).toBeGreaterThan(0);
+    for (const { sig } of fns)
+      for (const role of ['anon', 'authenticated']) {
+        const [r] = await db.query<{ ok: boolean }>(`SELECT has_function_privilege($1, $2, 'EXECUTE') AS ok`, [role, sig]);
+        expect(r!.ok, `${role} EXECUTE ${sig}`).toBe(false);
+      }
+  });
+
   it('audit events cannot be updated or deleted', async () => {
     const rid = await seed();
     await db.query(`INSERT INTO audit_events (restaurant_id, action) VALUES ($1, 'x')`, [rid]);

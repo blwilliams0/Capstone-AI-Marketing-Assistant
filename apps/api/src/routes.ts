@@ -5,6 +5,7 @@ import { inviteRequestSchema, revokeRequestSchema, type MeResponse } from '@the-
 import { recordAudit } from './audit.js';
 import type { AuthAdmin } from './auth/auth-admin.js';
 import { PolicyRouter } from './policy.js';
+import { addKnowledgeRoutes } from './knowledge/routes.js';
 
 export interface RouteDeps {
   db: Db;
@@ -180,6 +181,8 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
     );
     res.json({ events });
   });
+
+  addKnowledgeRoutes(r, db);
 
   return r;
 }

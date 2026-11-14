@@ -21,6 +21,10 @@ describe('permission matrix (PRD section 2)', () => {
     expect(roleHas('contributor', 'channel.connect')).toBe(false);
     expect(roleHas('contributor', 'users.invite')).toBe(false);
   });
+  it('everyone but viewers may propose knowledge; only admins approve it', () => {
+    for (const r of ['admin', 'approver', 'contributor'] as const) expect(roleHas(r, 'knowledge.propose')).toBe(true);
+    expect(roleHas('viewer', 'knowledge.propose')).toBe(false);
+  });
   it('viewer is read-only', () => {
     expect(roleHas('viewer', 'content.draft')).toBe(false);
     expect(roleHas('viewer', 'knowledge.view')).toBe(true);
