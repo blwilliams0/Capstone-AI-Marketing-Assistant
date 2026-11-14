@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router';
 import { useAuth } from './auth';
 import { Layout } from './Layout';
+import { Assistant } from './pages/Assistant';
+import { Draft } from './pages/Draft';
 import { Home } from './pages/Home';
 import { Knowledge } from './pages/Knowledge';
 import { SetPassword } from './pages/SetPassword';
@@ -38,6 +40,8 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Home />} />
+            <Route path="assistant" element={<Assistant />} />
+            <Route path="create" element={<Draft />} />
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="staff" element={<Staff />} />
             <Route path="*" element={<Navigate to="/" replace />} />

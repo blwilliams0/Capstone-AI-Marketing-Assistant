@@ -15,6 +15,7 @@ import {
 } from './middleware.js';
 import { buildRoutes } from './routes.js';
 import type { PolicyRouter } from './policy.js';
+import type { AiProvider } from './ai/provider.js';
 
 export interface AppDeps {
   db: Db;
@@ -22,7 +23,11 @@ export interface AppDeps {
   authAdmin?: AuthAdmin;
   webOrigin: string;
   /** Override limits (tests). Defaults: 300 requests per 5 minutes per IP and per signed-in user. */
-  rateLimits?: { perIp?: RateLimitOptions; perUser?: RateLimitOptions };
+  rateLimits?: { perIp?: RateLimitOptions; perUser?: RateLimitOptions; ai?: RateLimitOptions };
+  /** The AI provider, or null when none is configured. Defaults to null. */
+  ai?: AiProvider | null;
+  /** Monthly AI budget in US dollars (estimated cost). Defaults to 25. */
+  aiBudgetUsd?: number;
 }
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -42,7 +47,14 @@ export function createApp(deps: AppDeps): { app: express.Express; policies: Poli
   });
 
   // Everything under /api requires authentication first, then a per-route capability policy.
-  const policies = buildRoutes({ db: deps.db, authAdmin: deps.authAdmin });
+  const aiLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 30, ...deps.rateLimits?.ai });
+  const policies = buildRoutes({
+    db: deps.db,
+    authAdmin: deps.authAdmin,
+    ai: deps.ai ?? null,
+    aiBudgetUsd: deps.aiBudgetUsd ?? 25,
+    aiLimit,
+  });
   const perIp = rateLimit({
     windowMs: FIVE_MINUTES,
     max: 300,

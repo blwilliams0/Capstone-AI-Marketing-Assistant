@@ -19,17 +19,18 @@ export class PolicyRouter {
   readonly router = Router();
   readonly routes: RegisteredRoute[] = [];
 
-  private add(method: 'get' | 'post', path: string, policy: Policy, handler: RequestHandler) {
+  private add(method: 'get' | 'post', path: string, policy: Policy, handlers: RequestHandler[]) {
     this.routes.push({ method, path, policy });
-    this.router[method](path, requireCapability(policy), handler);
+    // The capability check always runs first, before any other middleware or handler.
+    this.router[method](path, requireCapability(policy), ...handlers);
   }
 
-  get(path: string, policy: Policy, handler: RequestHandler) {
-    this.add('get', path, policy, handler);
+  get(path: string, policy: Policy, ...handlers: RequestHandler[]) {
+    this.add('get', path, policy, handlers);
   }
 
-  post(path: string, policy: Policy, handler: RequestHandler) {
-    this.add('post', path, policy, handler);
+  post(path: string, policy: Policy, ...handlers: RequestHandler[]) {
+    this.add('post', path, policy, handlers);
   }
 }
 

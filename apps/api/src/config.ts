@@ -12,6 +12,10 @@ export interface Config {
   supabaseSecretKey?: string;
   /** Server-only. */
   databaseUrl?: string;
+  /** Server-only. When absent, AI uses the mock in development/test and is disabled elsewhere. */
+  anthropicApiKey?: string;
+  aiMode: 'claude' | 'mock' | 'disabled';
+  aiMonthlyBudgetUsd: number;
 }
 
 const envSchema = z.object({
@@ -22,6 +26,8 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SECRET_KEY: z.string().min(1).optional(),
   DATABASE_URL: z.string().min(1).optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  AI_MONTHLY_BUDGET_USD: z.coerce.number().min(0).max(10_000).default(25),
 });
 
 /** Environments in which mock authentication may ever run. Anything else is treated as production. */
@@ -52,6 +58,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
 
+  const anthropicApiKey = e.ANTHROPIC_API_KEY?.trim() || undefined;
+  const aiMode = anthropicApiKey ? 'claude' : MOCK_ALLOWED_ENVS.includes(nodeEnv) ? 'mock' : 'disabled';
+
   return {
     nodeEnv,
     port: e.API_PORT,
@@ -60,5 +69,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     supabaseUrl: e.SUPABASE_URL,
     supabaseSecretKey: e.SUPABASE_SECRET_KEY,
     databaseUrl: e.DATABASE_URL,
+    anthropicApiKey,
+    aiMode,
+    aiMonthlyBudgetUsd: e.AI_MONTHLY_BUDGET_USD,
   };
 }

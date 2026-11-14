@@ -11,6 +11,8 @@ interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Home' },
+  { to: '/assistant', label: 'Ask', needs: 'assistant.use' },
+  { to: '/create', label: 'Create a post', needs: 'content.draft' },
   { to: '/knowledge', label: 'Knowledge', needs: 'knowledge.view' },
   { to: '/staff', label: 'Staff', needs: 'users.manage' },
 ];

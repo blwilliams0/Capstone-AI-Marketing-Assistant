@@ -1,33 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { createMockAiProvider, modelFor } from './providers/ai.js';
 import { createMockSocialPublisher } from './providers/social.js';
 import { redact } from './audit.js';
 
 const digest = 'a'.repeat(64);
-
-describe('mock AI provider', () => {
-  it('routes interviews and evidence synthesis to Plus, routine tasks to Flash', () => {
-    expect(modelFor('brand_interview')).toBe('qwen3.7-plus');
-    expect(modelFor('brand_rule_extract')).toBe('qwen3.7-plus');
-    expect(modelFor('content_draft')).toBe('qwen3.8-flash');
-    expect(modelFor('marketing_question')).toBe('qwen3.8-flash');
-  });
-
-  it('always returns a clearly labelled draft', async () => {
-    const res = await createMockAiProvider().generate({ task: 'content_draft', prompt: 'hello' });
-    expect(res.status).toBe('draft');
-    expect(res.mock).toBe(true);
-    expect(res.text).toMatch(/MOCK/);
-  });
-
-  it('rejects invalid requests instead of crashing on missing fields', async () => {
-    const p = createMockAiProvider();
-    // @ts-expect-error deliberately invalid
-    await expect(p.generate({ task: 'publish_everything', prompt: 'x' })).rejects.toThrow();
-    // @ts-expect-error deliberately invalid
-    await expect(p.generate({})).rejects.toThrow();
-  });
-});
 
 describe('mock social publisher', () => {
   it('requires an approval digest and media checksum', async () => {

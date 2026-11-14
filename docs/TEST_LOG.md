@@ -172,3 +172,52 @@ While checking `DATABASE_URL`, a redaction command failed to match the connectio
 - A **real signed-in user**: bootstrap invitation email, setting a password, sign-in through the browser, and `GET /api/me` with a genuine Supabase token returning the administrator role. This needs the owner's email address and inbox, so it is the owner's step (see the checklist in `STAGE1_REMEDIATION_REPORT.md`).
 - Invitation of a second user, and revocation, against the live project.
 - The web app visually in a browser.
+
+## 6. Overnight coding run (2026-11-13): M0, M1, M2
+
+All results below are from commands run during the run. No live AI calls were made; the AI parts were tested with the mock provider and a fake Anthropic client.
+
+### 6.1 Automated tests
+
+| Package | Tests | Notes |
+|---|--:|---|
+| shared | 7 | Permission matrix incl. new `knowledge.propose` and `assistant.use` |
+| db | 32 | +12 knowledge-schema tests (digest computed by DB, no pre-approved inserts, approved text immutable, status transitions, one approved version per item, no deletes, one-way retirement, brand-core kinds, same-restaurant versions, full-text search, append-only sections); public roles have no access to any table, function or **sequence** |
+| api | 88 | +4 rate limiting, +19 knowledge (approval authority, self-approval confirmation, supersede, expiry, retire, brand-core cap, search returns approved only, restaurant boundary), +4 section splitting/query building, +22 AI (request shape against a fake Claude client: model, US inference, fallbacks, document blocks with citations, cache breakpoint; citation mapping; refusals; structured drafts; prompts; draft source checking; cost estimate; ask/draft/usage API; no provider → 503; budget reached → 503 recorded; provider failure → 502 recorded; AI rate limit) |
+| worker | 7 | unchanged |
+| **Total** | **134** | `npm test` (packages run one at a time) |
+
+Build (5/5), strict typecheck including tests (7/7), lint and `check:bundle` all passed.
+
+### 6.2 Problems found and fixed during the run
+
+| Problem | Fix |
+|---|---|
+| Stale React state would have sent a user back to the set-password screen after saving a password | Switched to a ref |
+| Conversation messages written in one transaction shared a timestamp, so an answer could appear before its question | Added an insertion-order `seq` column (migration 004, before it was applied) |
+| The new identity column created a sequence that Supabase's defaults would expose to public roles | Migration 004 revokes sequence privileges; test added; test database now reproduces Supabase's default sequence grants |
+| Windows test worker crashes (exit code 0xC0000409) when too many in-process Postgres instances ran at once | API/db tests limited to 2 workers; packages tested one at a time |
+| A first draft of the AI rate-limit test asserted nothing | Replaced with a real test (second request within the window returns 429) |
+
+### 6.3 Live dev database
+
+| Step | Result |
+|---|---|
+| `npm run db:migrate` | `Applied: 003_knowledge.sql`, later `Applied: 004_ai_usage_and_conversations.sql` |
+| Security check (read-only plus rollback-only trigger tests) | 14 tables, RLS on all 14; no RLS policies; anon/authenticated: no table, function or sequence privileges; 0 CASCADE rules; digest computed by DB; pre-approved insert blocked; editing approved text blocked; 0 leftover rows. **"RESULT: OK, no problems found"** |
+| `load-knowledge` (strategy) | "Loaded "Marketing strategy (capstone team draft)" as a proposal (10,991 characters)"; 21 searchable sections |
+| `load-knowledge` (research notes) | Loaded as a proposal (3,063 characters); 7 sections |
+| Re-running the loader | "Already loaded … Nothing changed." |
+| Admin membership | Unchanged (`admin / invited`); no auth users, invites or memberships touched |
+
+The two documents were proposed under the first administrator's profile by the setup script; the audit trail records `knowledge.loaded_by_script` so it is clear no one clicked in the app.
+
+### 6.4 Compiled API with the real `.env.local`
+
+Started with no `ANTHROPIC_API_KEY` and no `NODE_ENV`: startup log `aiMode: disabled` (fails closed, not mock). `POST /api/assistant/ask` without a token → 401; `mock:admin` token → 401. 0 errors logged.
+
+### 6.5 Not tested
+
+- Any live Claude request (no API key yet). The exact request shape is unit-tested against the installed SDK's types and a fake client only.
+- The new screens (sign-in recovery, staff, knowledge, ask, create a post) in a browser.
+- Real sign-in end to end.

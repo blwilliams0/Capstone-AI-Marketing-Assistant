@@ -5,6 +5,7 @@ export type Role = (typeof ROLES)[number];
 export const CAPABILITIES = [
   'knowledge.view',
   'knowledge.propose',
+  'assistant.use',
   'analytics.view',
   'content.draft',
   'approval.request',
@@ -32,10 +33,11 @@ const ADMIN_ONLY: Capability[] = [
 
 export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
   admin: CAPABILITIES,
-  approver: ['knowledge.view', 'knowledge.propose', 'analytics.view', 'content.draft', 'post.approve'],
+  approver: ['knowledge.view', 'knowledge.propose', 'assistant.use', 'analytics.view', 'content.draft', 'post.approve'],
   contributor: [
     'knowledge.view',
     'knowledge.propose',
+    'assistant.use',
     'analytics.view',
     'content.draft',
     'approval.request',

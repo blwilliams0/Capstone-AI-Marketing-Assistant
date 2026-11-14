@@ -3,10 +3,11 @@ import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, type JWK } from
 import type { Db } from '@the-pocket/db';
 import { createTestDb } from '@the-pocket/db/testing';
 import type { Role } from '@the-pocket/shared';
-import { createApp } from '../app.js';
+import { createApp, type AppDeps } from '../app.js';
 import type { AuthAdmin } from '../auth/auth-admin.js';
 import { createSupabaseAuthenticator } from '../auth/authenticator.js';
 import { createJwtVerifier } from '../auth/tokens.js';
+import type { AiProvider } from '../ai/provider.js';
 
 export const ISSUER = 'https://test-project.supabase.co/auth/v1';
 export const AUDIENCE = 'authenticated';
@@ -36,7 +37,9 @@ export interface SignOverrides {
   claims?: Record<string, unknown>;
 }
 
-export async function createHarness(opts: { withAuthAdmin?: boolean } = {}): Promise<Harness> {
+export async function createHarness(
+  opts: { withAuthAdmin?: boolean; ai?: AiProvider | null; aiBudgetUsd?: number; rateLimits?: AppDeps['rateLimits'] } = {},
+): Promise<Harness> {
   const withAuthAdmin = opts.withAuthAdmin ?? true;
   const db = await createTestDb();
   const { publicKey, privateKey } = await generateKeyPair('ES256');
@@ -59,6 +62,9 @@ export async function createHarness(opts: { withAuthAdmin?: boolean } = {}): Pro
     authenticator: createSupabaseAuthenticator(verifier, db),
     authAdmin: withAuthAdmin ? authAdmin : undefined,
     webOrigin: WEB_ORIGIN,
+    ai: opts.ai ?? null,
+    aiBudgetUsd: opts.aiBudgetUsd,
+    rateLimits: opts.rateLimits,
   });
 
   const [restaurant] = await db.query<{ id: string }>(`INSERT INTO restaurants (name) VALUES ('Test Restaurant') RETURNING id`);

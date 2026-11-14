@@ -69,6 +69,19 @@ describe('foundation migration', () => {
     }
   });
 
+  it('gives public roles no access to any sequence', async () => {
+    const seqs = await db.query<{ relname: string }>(
+      `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'S'`,
+    );
+    expect(seqs.length).toBeGreaterThan(0);
+    for (const { relname } of seqs)
+      for (const role of ['anon', 'authenticated'])
+        for (const priv of ['USAGE', 'SELECT', 'UPDATE']) {
+          const [r] = await db.query<{ ok: boolean }>(`SELECT has_sequence_privilege($1, $2, $3) AS ok`, [role, `public.${relname}`, priv]);
+          expect(r!.ok, `${role} ${priv} ${relname}`).toBe(false);
+        }
+  });
+
   it('does not let public roles execute ANY function in the public schema', async () => {
     const fns = await db.query<{ sig: string }>(
       `SELECT p.oid::regprocedure::text AS sig FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace

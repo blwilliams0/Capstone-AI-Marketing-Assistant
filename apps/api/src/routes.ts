@@ -1,4 +1,4 @@
-import type { Response } from 'express';
+import type { RequestHandler, Response } from 'express';
 import { z } from 'zod';
 import type { Db } from '@the-pocket/db';
 import { inviteRequestSchema, revokeRequestSchema, type MeResponse } from '@the-pocket/shared';
@@ -6,11 +6,18 @@ import { recordAudit } from './audit.js';
 import type { AuthAdmin } from './auth/auth-admin.js';
 import { PolicyRouter } from './policy.js';
 import { addKnowledgeRoutes } from './knowledge/routes.js';
+import { addAssistantRoutes } from './ai/routes.js';
+import type { AiProvider } from './ai/provider.js';
 
 export interface RouteDeps {
   db: Db;
   /** Absent when SUPABASE_SECRET_KEY is not configured; invitations then answer 503. */
   authAdmin?: AuthAdmin;
+  /** null: AI routes answer 503 (no provider configured). */
+  ai: AiProvider | null;
+  aiBudgetUsd: number;
+  /** Extra per-user limit for routes that call the AI (they cost money). */
+  aiLimit: RequestHandler;
 }
 
 const idParam = z.object({ id: z.string().uuid() });
@@ -183,6 +190,7 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
   });
 
   addKnowledgeRoutes(r, db);
+  addAssistantRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
 
   return r;
 }

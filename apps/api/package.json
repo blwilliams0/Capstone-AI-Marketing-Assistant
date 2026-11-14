@@ -15,6 +15,7 @@
     "load-knowledge": "tsx --env-file-if-exists=../../.env.local src/scripts/load-knowledge.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@supabase/supabase-js": "^2.46.2",
     "@the-pocket/db": "*",
     "@the-pocket/shared": "*",

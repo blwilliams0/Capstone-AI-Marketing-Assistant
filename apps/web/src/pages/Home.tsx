@@ -7,6 +7,7 @@ import { Card } from '../ui';
 export const CAPABILITY_LABELS: Record<string, string> = {
   'knowledge.view': 'Read approved marketing material',
   'knowledge.propose': 'Suggest new brand rules, facts and documents',
+  'assistant.use': 'Ask the marketing assistant',
   'analytics.view': 'See marketing reports',
   'content.draft': 'Draft marketing content',
   'approval.request': 'Submit drafts for review',
@@ -42,6 +43,18 @@ export function Home() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
+        {can('assistant.use') && (
+          <Link to="/assistant" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
+            <p className="font-medium">Ask the marketing assistant</p>
+            <p className="text-sm text-stone-600">Practical answers grounded in The Pocket's approved brand and strategy, with sources.</p>
+          </Link>
+        )}
+        {can('content.draft') && (
+          <Link to="/create" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
+            <p className="font-medium">Create a post</p>
+            <p className="text-sm text-stone-600">Choose locals or visitors, a channel and a goal; get on-brand draft options.</p>
+          </Link>
+        )}
         {can('knowledge.view') && (
           <Link to="/knowledge" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
             <p className="font-medium">Manage The Pocket's knowledge</p>
@@ -55,7 +68,7 @@ export function Home() {
           </Link>
         )}
         <div className="rounded-lg border border-dashed border-stone-300 p-5 text-stone-500">
-          <p className="font-medium">Ask the assistant · Create a post · Review and approve · Plan and measure</p>
+          <p className="font-medium">Review and approve · Plan and measure</p>
           <p className="text-sm">Coming next.</p>
         </div>
       </div>

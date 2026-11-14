@@ -25,6 +25,10 @@ describe('permission matrix (PRD section 2)', () => {
     for (const r of ['admin', 'approver', 'contributor'] as const) expect(roleHas(r, 'knowledge.propose')).toBe(true);
     expect(roleHas('viewer', 'knowledge.propose')).toBe(false);
   });
+  it('viewers cannot use the AI assistant (it costs money); other roles can', () => {
+    expect(roleHas('viewer', 'assistant.use')).toBe(false);
+    for (const r of ['admin', 'approver', 'contributor'] as const) expect(roleHas(r, 'assistant.use')).toBe(true);
+  });
   it('viewer is read-only', () => {
     expect(roleHas('viewer', 'content.draft')).toBe(false);
     expect(roleHas('viewer', 'knowledge.view')).toBe(true);

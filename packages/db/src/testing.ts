@@ -42,6 +42,7 @@ const SUPABASE_STUB = `
   -- any table the migrations forget to lock down.
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
 `;
 
 /** In-process Postgres (no Docker) with the real migrations applied. Tests only. */

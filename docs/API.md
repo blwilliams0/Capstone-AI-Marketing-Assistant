@@ -23,6 +23,15 @@ Base URL in development: `http://localhost:3000`. All routes under `/api` requir
 | `POST /api/knowledge/:itemId/retire` | `brand.approve` (admin) | Stop using an item `{ reason }`. Cannot be undone. |
 | `POST /api/knowledge/:itemId/brand-core` | `brand.approve` (admin) | `{ inBrandCore }`. Only brand rules and facts. |
 
+| `GET /api/assistant/status` | any member | `{ available, provider }`: `anthropic`, `mock` (practice mode, development only) or `disabled`. |
+| `POST /api/assistant/ask` | `assistant.use` | `{ question, conversationId? }` → answer, cited sources (approved knowledge versions), what the assistant was given. Stored in the asker's own conversation. |
+| `GET /api/assistant/conversations` | `assistant.use` | Your own recent conversations. |
+| `GET /api/assistant/conversations/:conversationId` | `assistant.use` | One of your conversations (others' return 404). |
+| `POST /api/drafts/generate` | `content.draft` | `{ audience: locals|tourists|both, channel, goal, topic }` → 2–3 options with the sources each relies on, what to confirm, risks, timing, measures, photo tips, warnings. Nothing is saved or posted. |
+| `GET /api/ai/usage` | `analytics.view_sensitive` (admin) | Estimated AI spend this month, budget, request count. |
+
+AI routes return **503** when no AI is configured (`reason: disabled`) or this month's budget is reached (`reason: budget`), and **502** if the AI service fails. They have an extra limit of 30 requests per 10 minutes per person.
+
 All `/api` routes are rate limited (300 requests per 5 minutes per IP and per signed-in user; 429 with `Retry-After`).
 
 The old `/api/qwen/*` and `/api/social/*` routes from the first draft were removed. Publishing will never be a public HTTP endpoint; it will only happen in the worker after an approval is re-checked (Stage 4).
@@ -32,7 +41,7 @@ The old `/api/qwen/*` and `/api/social/*` routes from the first draft were remov
 | Permission | Admin | Approver | Contributor | Viewer |
 |---|:-:|:-:|:-:|:-:|
 | `knowledge.view`, `analytics.view` | yes | yes | yes | yes |
-| `knowledge.propose` | yes | yes | yes | no |
+| `knowledge.propose`, `assistant.use` | yes | yes | yes | no |
 | `content.draft` | yes | yes | yes | no |
 | `approval.request`, `data.import` | yes | no | yes | no |
 | `post.approve` | yes | yes | no | no |
