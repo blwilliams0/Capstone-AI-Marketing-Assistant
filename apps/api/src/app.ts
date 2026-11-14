@@ -4,7 +4,15 @@ import helmet from 'helmet';
 import type { Db } from '@the-pocket/db';
 import type { Authenticator } from './auth/authenticator.js';
 import type { AuthAdmin } from './auth/auth-admin.js';
-import { authenticate, errorHandler, notFound, requestId, requestLogger } from './middleware.js';
+import {
+  authenticate,
+  errorHandler,
+  notFound,
+  rateLimit,
+  requestId,
+  requestLogger,
+  type RateLimitOptions,
+} from './middleware.js';
 import { buildRoutes } from './routes.js';
 import type { PolicyRouter } from './policy.js';
 
@@ -13,7 +21,11 @@ export interface AppDeps {
   authenticator: Authenticator;
   authAdmin?: AuthAdmin;
   webOrigin: string;
+  /** Override limits (tests). Defaults: 300 requests per 5 minutes per IP and per signed-in user. */
+  rateLimits?: { perIp?: RateLimitOptions; perUser?: RateLimitOptions };
 }
+
+const FIVE_MINUTES = 5 * 60 * 1000;
 
 export function createApp(deps: AppDeps): { app: express.Express; policies: PolicyRouter } {
   const app = express();
@@ -31,7 +43,15 @@ export function createApp(deps: AppDeps): { app: express.Express; policies: Poli
 
   // Everything under /api requires authentication first, then a per-route capability policy.
   const policies = buildRoutes({ db: deps.db, authAdmin: deps.authAdmin });
-  app.use('/api', authenticate(deps.authenticator), policies.router);
+  const perIp = rateLimit({
+    windowMs: FIVE_MINUTES,
+    max: 300,
+    ...deps.rateLimits?.perIp,
+    key: (req) => `ip:${req.ip ?? 'unknown'}`,
+  });
+  const perUser = rateLimit({ windowMs: FIVE_MINUTES, max: 300, ...deps.rateLimits?.perUser });
+  // Limit by IP before verifying tokens (cheap protection against floods), then per user.
+  app.use('/api', perIp, authenticate(deps.authenticator), perUser, policies.router);
 
   app.use(notFound);
   app.use(errorHandler);

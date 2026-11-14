@@ -1,11 +1,29 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { MeResponse, Role } from '@the-pocket/shared';
 
 const MOCK_KEY = 'the-pocket-mock-role';
 
-// Supabase invitation and password-reset links arrive with the type in the URL hash.
-const arrivedViaInvite = typeof window !== 'undefined' && /type=(invite|recovery)/.test(window.location.hash);
+/** Reads Supabase's auth parameters from the URL once, before supabase-js clears them. */
+function readAuthUrl(): { linkType: string | null; error: string | null } {
+  if (typeof window === 'undefined') return { linkType: null, error: null };
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  for (const [k, v] of new URLSearchParams(window.location.search)) if (!params.has(k)) params.set(k, v);
+  const code = params.get('error_code');
+  const description = params.get('error_description');
+  let error: string | null = null;
+  if (code || params.get('error')) {
+    error =
+      code === 'otp_expired'
+        ? 'That link has expired or was already used. Enter your email below and choose "Email me a sign-in link" to get a new one.'
+        : `Sign-in link problem: ${description ?? code ?? 'unknown error'}. Request a new link below.`;
+  }
+  return { linkType: params.get('type'), error };
+}
+
+const authUrl = readAuthUrl();
+// Invitation and password-reset links both mean "this person must choose a password now".
+const arrivedToSetPassword = authUrl.linkType === 'invite' || authUrl.linkType === 'recovery';
 
 export const supabase: SupabaseClient | null =
   __SUPABASE_URL__ && __SUPABASE_PUBLISHABLE_KEY__
@@ -18,11 +36,15 @@ interface AuthState {
   status: Status;
   me: MeResponse | null;
   message: string | null;
+  /** A problem reported by Supabase in the link the user followed (expired, already used, ...). */
+  linkError: string | null;
   signIn(email: string, password: string): Promise<string | null>;
   signInMock(role: Role): void;
+  /** Sends a password-reset email. Always reports success so it cannot reveal who has an account. */
+  sendResetLink(email: string): Promise<string | null>;
   setPassword(password: string): Promise<string | null>;
   signOut(): Promise<void>;
-  apiFetch(path: string): Promise<Response>;
+  apiFetch(path: string, init?: { method?: string; body?: unknown }): Promise<Response>;
 }
 
 const Ctx = createContext<AuthState | null>(null);
@@ -47,10 +69,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>('loading');
   const [me, setMe] = useState<MeResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // A ref, not state: loadMe must always see the current value, not the one from its closure.
+  const needsPassword = useRef(arrivedToSetPassword && !__MOCK_AUTH__);
 
-  const apiFetch = useCallback(async (path: string) => {
+  const apiFetch = useCallback(async (path: string, init?: { method?: string; body?: unknown }) => {
     const token = await currentToken();
-    return fetch(`${__API_URL__}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (init?.body !== undefined) headers['Content-Type'] = 'application/json';
+    return fetch(`${__API_URL__}${path}`, {
+      method: init?.method ?? 'GET',
+      headers,
+      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+    });
   }, []);
 
   const loadMe = useCallback(async () => {
@@ -64,10 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiFetch('/api/me');
       if (res.ok) {
         setMe((await res.json()) as MeResponse);
-        setStatus(arrivedViaInvite && !__MOCK_AUTH__ ? 'needs_password' : 'ready');
+        setStatus(needsPassword.current ? 'needs_password' : 'ready');
       } else if (res.status === 403) {
         setMe(null);
-        setMessage((await res.json()).error as string);
+        setMessage(((await res.json()) as { error: string }).error);
         setStatus('no_access');
       } else {
         setMe(null);
@@ -83,7 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void loadMe();
     if (!supabase) return;
     const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') void loadMe();
+      if (event === 'PASSWORD_RECOVERY') needsPassword.current = true;
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'PASSWORD_RECOVERY') void loadMe();
     });
     return () => data.subscription.unsubscribe();
   }, [loadMe]);
@@ -93,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       me,
       message,
+      linkError: authUrl.error,
       async signIn(email, password) {
         if (!supabase) return 'Sign-in is not configured yet.';
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -105,12 +138,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.setItem(MOCK_KEY, role);
         void loadMe();
       },
+      async sendResetLink(email) {
+        if (!supabase) return 'Sign-in is not configured yet.';
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.origin,
+        });
+        // Rate-limit errors are worth showing; anything else is hidden so the form cannot
+        // be used to discover which email addresses have accounts.
+        if (error && /rate limit|too many/i.test(error.message)) {
+          return 'Too many emails were requested. Please wait a few minutes and try again.';
+        }
+        return null;
+      },
       async setPassword(password) {
         if (!supabase) return 'Sign-in is not configured yet.';
         const { error } = await supabase.auth.updateUser({ password });
         if (error) return error.message;
+        needsPassword.current = false;
         window.history.replaceState(null, '', window.location.pathname);
-        window.location.reload();
+        await loadMe();
         return null;
       },
       async signOut() {
@@ -126,4 +172,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** Reads a JSON error body from the API in a consistent, user-friendly way. */
+export async function readError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string; problems?: { field: string; message: string }[] };
+    if (body.problems?.length) return `${body.error ?? 'Invalid input.'} ${body.problems.map((p) => `${p.field}: ${p.message}`).join('; ')}`;
+    return body.error ?? `Request failed (${res.status}).`;
+  } catch {
+    return `Request failed (${res.status}).`;
+  }
 }
