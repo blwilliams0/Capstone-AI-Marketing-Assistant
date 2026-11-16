@@ -55,6 +55,11 @@ Last updated: 2026-11-13 (end of the overnight coding run). Labels: *working in 
 - **M4:** in-app brand interview (question set from `docs/strategy/BRAND_INTERVIEW_GUIDE.md`), calendar and reminders, fact-expiry nudges, image upload.
 - **M5–M6:** measurement, export, security review, end-to-end test, deployment, guides.
 
+## Requested for later (owner, 2026-11-16; not in the prototype, possibly after the semester)
+
+- **Administrators can read staff assistant conversations.** Today conversations are private to the asker. Staff should be told plainly that management can read them before this is turned on.
+- **Controlled guardrails** on what the assistant will discuss or draft (scope to be defined with management: for example topic limits, banned claims, escalation to a manager).
+
 ## Known limitations
 
 - Rate-limit counters are in memory (one API process). Fine for one restaurant; revisit if the API ever runs as several processes. Behind a hosting proxy, Express `trust proxy` must be set so limits see real client IPs (deployment task).
