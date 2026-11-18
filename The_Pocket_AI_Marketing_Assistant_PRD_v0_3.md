@@ -1,3 +1,5 @@
+> **Superseded in part (2026-11-13).** Read with [The_Pocket_AI_Marketing_Assistant_PRD_v0_4.md](The_Pocket_AI_Marketing_Assistant_PRD_v0_4.md), which replaces this document where they differ (Claude instead of Qwen; no embeddings in V1; assisted manual posting; new schedule). This file is kept unchanged below as the project record.
+
 # The Pocket AI Marketing Assistant — Product Requirements Document
 
 **Version:** 0.3 (Markdown)  

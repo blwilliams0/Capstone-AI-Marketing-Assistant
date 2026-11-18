@@ -1,6 +1,5 @@
 # Dependencies
 node_modules
-pnpm-lock.yaml
 
 # Build outputs
 dist
@@ -42,3 +41,7 @@ uploads
 media
 uploads/*
 media/*
+
+# Local env variants
+.env*.local
+.turbo

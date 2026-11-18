@@ -1,0 +1,223 @@
+# Test Log
+
+Real results from commands run on the developer's Windows machine (Node 24.15.0, npm 11.12.1). Sections 1 to 4 are the offline verification of 2026-11-08 (76 tests at that time). **Section 5 is the live Supabase verification of 2026-11-09**, after which the suite stands at 78 tests. No real browser, real AI services or real social accounts have been used.
+
+## 1. Baseline: Qwen's committed code (commit 9267e45)
+
+Inspected before any changes. Not run because it could not be: no dependencies had ever been installed, `apps/web/package.json` did not exist, `pnpm-lock.yaml` was an empty placeholder, and pnpm is not installed on this machine. Reading the code found these blocking defects:
+
+- Template literals destroyed by PowerShell in `server.ts`, `logger.ts` and the web `api.ts`; `$$` delimiters destroyed in the SQL trigger function; `$schema` key empty in `turbo.json`.
+- `routes.ts` imported itself; `server.ts` called `listen()` on import; the audit middleware used an action not in its type; `@types/express@5` with `express@4`.
+- The web app imported `createApi` from React Query, which does not exist, and re-exported files that did not exist.
+- Both "tests" were fake: `auth.test.ts` asserted `expect(true).toBe(true)`; `server.test.ts` imported a name that was never exported.
+- Authentication treated every request as a mock user whose role came from an environment variable.
+
+## 2. Clean-room verification of the repaired code
+
+Procedure: deleted `node_modules` and all build output, then ran each command in order. Full output was captured to a log; key lines below.
+
+| Command | Result |
+|---|---|
+| `npm ci` | exit 0. "added 344 packages, and audited 356 packages in 25s" |
+| `npm run build` | exit 0. "Tasks: 5 successful, 5 total" (shared, db, api, worker, web) |
+| `npm run typecheck` | exit 0. "Tasks: 7 successful, 7 total" (includes test files) |
+| `npm run lint` | exit 0, no errors or warnings |
+| `npm test` | exit 0. "Tasks: 6 successful, 6 total" |
+| `npm run check:bundle` | exit 0. "OK: 3 bundle files checked, no server secrets or mock sign-in found." |
+
+### Automated tests: 76 passed, 0 failed (at 2026-11-08; 78 after section 5 fixes)
+
+| Package | File | Tests | What it proves |
+|---|---|--:|---|
+| shared | `roles.test.ts` | 5 | Permission matrix matches PRD section 2 (approver cannot approve brand rules; contributor cannot approve or publish; viewer read-only) |
+| db | `migrations.test.ts` | 10 (now 12, see section 5) | Migration applies and is idempotent; RLS on every table; audit, permission and job history cannot be updated or deleted; role and status checks; one membership per user per restaurant; revoked memberships need a revoker; job idempotency keys; restrictive deletes |
+| db | `jobs.test.ts` | 7 | Duplicate enqueue creates one job; a job is claimed by one worker only; only the lease holder can complete; retry with backoff then permanent failure; future jobs wait; crashed-worker jobs are re-claimed but never past max attempts |
+| api | `auth.test.ts` | 13 | 401 for missing, malformed, expired, wrong-issuer, wrong-audience and wrong-key tokens; 403 for no membership and for revoked members; forged `user_metadata`/`app_metadata` role ignored; invited member activated on first sign-in; CORS restricted to the web origin; 404s leak nothing |
+| api | `rbac.test.ts` | 4 | **Every registered route is tested against every role** and must return 403 exactly when the role lacks the permission; contributor/viewer/approver cannot invite or read the audit trail; a contributor cannot create an admin |
+| api | `members.test.ts` | 13 | Invitation writes membership, permission event and audit event; input validation; duplicate refused; 503 when not configured; removal blocks the very next request; reason required; double removal refused; last administrator protected; another restaurant's members untouchable; audit output contains no secrets |
+| api | `config.test.ts` | 11 | Mock auth refused in production, in unset `NODE_ENV` and in staging; allowed only in development and test; real auth is the default; missing Supabase settings refused; errors never echo secrets; mock tokens still hit the permission checks |
+| api | `providers.test.ts` | 6 | Model routing (Plus vs Flash); AI output always a labelled draft; invalid input rejected; mock publisher requires approval digest and media checksum; audit redaction |
+| worker | `worker.test.ts` | 7 | Idle when empty; no-op job completes; unknown job type fails immediately and is never retried; no publishing handler registered; inherited keys such as `toString` are not handlers; throwing handler retried and worker survives; two workers never run the same job |
+
+### Runtime checks of the compiled API (plain `node apps/api/dist/index.js`)
+
+| Check | Result |
+|---|---|
+| `NODE_ENV=production AUTH_MODE=mock` | Refused to start, exit 1 |
+| `NODE_ENV` unset, `AUTH_MODE=mock` | Refused to start, exit 1 |
+| Production without Supabase settings | Refused to start |
+| Dev mock mode: `GET /health` | 200 |
+| `GET /api/me`, no token | 401 |
+| `GET /api/me` as mock contributor | 200 |
+| `POST /api/admin/invitations` as mock contributor | 403 |
+| `GET /api/audit-events` as mock viewer | 403 |
+| `POST /api/social/publish`, `POST /api/qwen/chat` (formerly open endpoints) | 404 |
+| `npm run dev` script loads root `.env.local` | Confirmed: only the missing `DATABASE_URL` was reported, so `SUPABASE_URL` was read |
+
+### Web bundle secret scan
+
+- Searched the production bundle for `SUPABASE_SECRET_KEY`, `DATABASE_URL`, `postgres://`, `service_role`, secret-key material and the mock sign-in: none found.
+- One raw `sb_secret` string exists in the bundle. Inspected: it is supabase-js's own key-format check (`startsWith("sb_secret_")`), with no key material. `check-bundle.mjs` therefore looks for key *material* and server variable names, not the bare prefix.
+- The scanner was proven to detect a deliberately injected fake key (FAIL), then pass again after removal.
+
+### Credential sweep
+
+- The real publishable key and project URL from `.env.local` were searched for (without printing them) in all project files except `.env.local` and build output: 0 matches.
+- Key-shaped string scan: only fake test fixtures.
+- `.env.local` is git-ignored and was never tracked. No real secrets were found in git history (the single prior commit contains placeholders only).
+
+### Dependency audit (`npm audit`)
+
+- Before: 14 vulnerabilities (2 critical, 2 high, 10 moderate), including 1 high in a production dependency (`zod`).
+- Actions: `npm audit fix`, `zod` to 4.6.7, `vitest` to 5.1.
+- After: 7 moderate, all in `typescript-eslint` (development lint tooling only). Zero in production dependencies.
+
+## 3. Failures encountered while fixing (kept for honesty)
+
+| What happened | Cause | Resolution |
+|---|---|---|
+| Migration tests failed: "extension pgcrypto is not available" | In-process Postgres lacks that extension | Removed the line; `gen_random_uuid()` is built into Postgres 13+ and Supabase |
+| 3 job-queue tests failed | Test bug: an earlier test left a queued job that later tests claimed | Cancel leftover jobs before each test. Queue code unchanged |
+| CORS test failed | Test bug: the `cors` package returns the configured origin for every request; browsers enforce the mismatch | Test now asserts the header is never `*` and never echoes the attacker's origin |
+| `turbo` refused to run | Needs a `packageManager` field for npm workspaces | Added |
+| Lint error in `check-bundle.mjs` | Ternary used as a statement | Rewritten as if/else |
+| `db/migrations/README.md` could not be edited | Qwen wrote it as UTF-16 | Deleted and rewritten as UTF-8; scan found no other affected file |
+
+## 4. Not tested as of 2026-11-08 (superseded by section 5 where noted)
+
+- Sign-in, token verification and invitations against the real Supabase project. *Partly covered in section 5.*
+- The migration on the real Supabase Postgres. *Done in section 5.*
+- The web app visually in a browser, including the invitation and password flow. *Still open.*
+- Concurrency under real network latency, load, or rate limiting. *Still open.*
+- Backup and restore, deployment, monitoring (Stage 5). *Still open.*
+
+## 5. Live Supabase verification (2026-11-09)
+
+Target: the owner's development Supabase project (session-mode pooler, region `us-west-2`, PostgreSQL 17.11). Credentials were read from the git-ignored `.env.local` and never written to any file or log.
+
+### 5.1 Environment
+
+| Check | Result |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `DATABASE_URL` | All four present |
+| `DATABASE_URL` format | **Initially unparseable**: the value had been split across two lines in `.env.local` (a line break between the password and `@host`). Joined into one line; it then parsed (`postgresql://`, pooler host, port 5432, database `postgres`) |
+
+### 5.2 Pre-migration inspection (read-only)
+
+Connected successfully. PostgreSQL 17.11, role `postgres`. **No tables in `public`, no `schema_migrations`, 0 auth users, no name collisions with the migration**, `gen_random_uuid()` available, Supabase roles `anon`, `authenticated`, `service_role` present. The database was empty, so migration 001 was safe to apply.
+
+### 5.3 Migration
+
+`npm run db:migrate` printed `Applied: 001_foundation.sql`.
+
+### 5.4 Post-migration verification found two real security gaps
+
+| Gap | Cause | Why offline tests missed it |
+|---|---|---|
+| `schema_migrations` had row-level security **off**, and `anon` and `authenticated` held ALL privileges on it | The migration runner creates this table itself, and Supabase grants broad rights on new public tables by default. Anyone holding the public publishable key could have read, changed or truncated migration history through the Data API | The test excluded this table, and the in-process test database had no Supabase-style default grants |
+| `forbid_change()` executable by `anon` and `authenticated` | Supabase's default function privileges | Same reason. Low impact (a trigger function cannot do anything when called directly), but needless exposure |
+
+Fixes: the runner now locks down its own table on every run; new migration `002_harden_functions.sql` revokes the function privileges (001 was left untouched since it had already been applied); the test database now reproduces Supabase's default grants; tests were added that assert no `anon` or `authenticated` access to any table and no public execute on the function. Proof the tests are real guards: with 002 temporarily removed, "does not let public roles execute the trigger function directly" **failed**; restored, all pass. `npm run db:migrate` then printed `Applied: 002_harden_functions.sql`.
+
+### 5.5 Final live database state
+
+| Check | Result |
+|---|---|
+| Migration history | `001_foundation.sql`, `002_harden_functions.sql` |
+| Row-level security | **On for all 8 tables** (7 application tables + `schema_migrations`) |
+| RLS policies | None (deny-all for public roles, by design) |
+| Table privileges held by `anon` / `authenticated` | None |
+| `anon`/`authenticated` SELECT or INSERT on memberships, audit_events, jobs | All `false` |
+| Foreign keys | All RESTRICT; **0 CASCADE** delete rules |
+| `forbid_change()` executable by `anon` / `authenticated` | `false` / `false` |
+| Append-only: `UPDATE audit_events` | **Blocked**: "audit_events is append-only: UPDATE is not allowed" |
+| Append-only: `DELETE audit_events` | **Blocked** |
+| Rollback test left behind rows | 0 |
+| Row counts (all 7 application tables) | 0 (database ready for bootstrap) |
+
+### 5.6 Supabase Auth checks (read-only; nothing created or emailed)
+
+| Check | Result |
+|---|---|
+| JWKS endpoint | HTTP 200, 1 key: `EC`, `ES256`, `P-256`, `use=sig`. **Asymmetric signing confirmed**, which the API's verifier supports. This closes the open risk from the Stage 1 report |
+| Secret key accepted by the Auth admin API | HTTP 200 (read-only user list, 0 users) |
+| Publishable key accepted | HTTP 200 |
+| Email provider enabled | true |
+| Email confirmation required (`mailer_autoconfirm`) | false = confirmation required (good) |
+| **Public sign-ups** (`disable_signup`) | **false: anyone can self-register an identity.** Not a privilege escalation (a stranger has no membership, so the API answers 403), but this app is invite-only. *Recommend turning "Allow new users to sign up" off in the Supabase dashboard (owner action).* |
+
+### 5.7 Compiled API in real Supabase mode (live signing keys, live database)
+
+Started `node apps/api/dist/index.js` with the real `.env.local`; startup log reported `authMode: supabase`. Server log contained 0 errors.
+
+| Request | Status |
+|---|---|
+| `GET /health` | 200 |
+| `GET /api/me`, no token | 401 |
+| `GET /api/me`, garbage token | 401 |
+| `GET /api/me`, `Bearer mock:admin` (mock tokens must not work live) | 401 |
+| `GET /api/me`, token forged with a throwaway key but the project's real key id, issuer and an admin claim | 401 |
+| `GET /api/admin/members`, same forged admin token | 401 |
+
+### 5.8 Full suite after the fixes
+
+`npm run build` (5/5), `typecheck` (7/7), `lint` (clean), `npm test` (**78 passed**: shared 5, db 19, api 47, worker 7), `check:bundle` OK. All exit 0.
+
+### 5.9 Incident note
+
+While checking `DATABASE_URL`, a redaction command failed to match the connection string and printed the line, **including the database password, into the working session's output**. It was not written to any file. Because it exists in that transcript, rotating the database password is recommended (Supabase dashboard, Project Settings, Database, Reset database password; then update `.env.local`). The `.env.local` fix and the verification scripts used afterwards print no credentials.
+
+### 5.10 Still not verified live
+
+- A **real signed-in user**: bootstrap invitation email, setting a password, sign-in through the browser, and `GET /api/me` with a genuine Supabase token returning the administrator role. This needs the owner's email address and inbox, so it is the owner's step (see the checklist in `STAGE1_REMEDIATION_REPORT.md`).
+- Invitation of a second user, and revocation, against the live project.
+- The web app visually in a browser.
+
+## 6. Overnight coding run (2026-11-13): M0, M1, M2
+
+All results below are from commands run during the run. No live AI calls were made; the AI parts were tested with the mock provider and a fake Anthropic client.
+
+### 6.1 Automated tests
+
+| Package | Tests | Notes |
+|---|--:|---|
+| shared | 7 | Permission matrix incl. new `knowledge.propose` and `assistant.use` |
+| db | 32 | +12 knowledge-schema tests (digest computed by DB, no pre-approved inserts, approved text immutable, status transitions, one approved version per item, no deletes, one-way retirement, brand-core kinds, same-restaurant versions, full-text search, append-only sections); public roles have no access to any table, function or **sequence** |
+| api | 88 | +4 rate limiting, +19 knowledge (approval authority, self-approval confirmation, supersede, expiry, retire, brand-core cap, search returns approved only, restaurant boundary), +4 section splitting/query building, +22 AI (request shape against a fake Claude client: model, US inference, fallbacks, document blocks with citations, cache breakpoint; citation mapping; refusals; structured drafts; prompts; draft source checking; cost estimate; ask/draft/usage API; no provider → 503; budget reached → 503 recorded; provider failure → 502 recorded; AI rate limit) |
+| worker | 7 | unchanged |
+| **Total** | **134** | `npm test` (packages run one at a time) |
+
+Build (5/5), strict typecheck including tests (7/7), lint and `check:bundle` all passed.
+
+### 6.2 Problems found and fixed during the run
+
+| Problem | Fix |
+|---|---|
+| Stale React state would have sent a user back to the set-password screen after saving a password | Switched to a ref |
+| Conversation messages written in one transaction shared a timestamp, so an answer could appear before its question | Added an insertion-order `seq` column (migration 004, before it was applied) |
+| The new identity column created a sequence that Supabase's defaults would expose to public roles | Migration 004 revokes sequence privileges; test added; test database now reproduces Supabase's default sequence grants |
+| Windows test worker crashes (exit code 0xC0000409) when too many in-process Postgres instances ran at once | API/db tests limited to 2 workers; packages tested one at a time |
+| A first draft of the AI rate-limit test asserted nothing | Replaced with a real test (second request within the window returns 429) |
+
+### 6.3 Live dev database
+
+| Step | Result |
+|---|---|
+| `npm run db:migrate` | `Applied: 003_knowledge.sql`, later `Applied: 004_ai_usage_and_conversations.sql` |
+| Security check (read-only plus rollback-only trigger tests) | 14 tables, RLS on all 14; no RLS policies; anon/authenticated: no table, function or sequence privileges; 0 CASCADE rules; digest computed by DB; pre-approved insert blocked; editing approved text blocked; 0 leftover rows. **"RESULT: OK, no problems found"** |
+| `load-knowledge` (strategy) | "Loaded "Marketing strategy (capstone team draft)" as a proposal (10,991 characters)"; 21 searchable sections |
+| `load-knowledge` (research notes) | Loaded as a proposal (3,063 characters); 7 sections |
+| Re-running the loader | "Already loaded … Nothing changed." |
+| Admin membership | Unchanged (`admin / invited`); no auth users, invites or memberships touched |
+
+The two documents were proposed under the first administrator's profile by the setup script; the audit trail records `knowledge.loaded_by_script` so it is clear no one clicked in the app.
+
+### 6.4 Compiled API with the real `.env.local`
+
+Started with no `ANTHROPIC_API_KEY` and no `NODE_ENV`: startup log `aiMode: disabled` (fails closed, not mock). `POST /api/assistant/ask` without a token → 401; `mock:admin` token → 401. 0 errors logged.
+
+### 6.5 Not tested
+
+- Any live Claude request (no API key yet). The exact request shape is unit-tested against the installed SDK's types and a fake client only.
+- The new screens (sign-in recovery, staff, knowledge, ask, create a post) in a browser.
+- Real sign-in end to end.

@@ -1,3 +1,5 @@
+> **Superseded in part (2026-11-13).** Read with [The_Pocket_AI_Architecture_Addendum_v0_4.md](The_Pocket_AI_Architecture_Addendum_v0_4.md), which replaces this document where they differ (Claude instead of Qwen; no embeddings in V1; assisted manual posting; new schedule). This file is kept unchanged below as the project record.
+
 # Instructions for Qwen Code — The Pocket architecture v0.3
 
 **Role:** Software engineer working under the product owner's and lead designer's architecture decisions.
