@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 import { APPROVAL_EVENT_LABELS, AUDIENCE_LABELS, CHANNEL_LABELS, type PostDetail as Detail, type PostVersionView } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, Card, buttonClass, inputClass, secondaryButtonClass } from '../ui';
+import { PostPhoto } from './PostPhoto';
 import { StatusChip } from './Posts';
 
 const fmt = (iso: string) => new Date(iso).toLocaleString();
@@ -161,6 +162,9 @@ export function PostDetail() {
         ) : (
           <>
             <VersionBody v={latest} />
+            <div className="mt-4">
+              <PostPhoto itemId={post.id} versionId={latest.id} sha256={latest.media?.sha256 ?? null} canEdit={!locked && can('content.draft')} approved={open?.status === 'approved'} onChanged={load} />
+            </div>
             <p className="mt-3 text-xs text-stone-500">
               Written by {latest.createdBy.name} {latest.origin === 'ai_draft' ? '(from an assistant draft)' : ''} on {fmt(latest.createdAt)} · fingerprint{' '}
               <code>{shortPrint(latest.digest)}</code>

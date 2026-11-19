@@ -344,3 +344,19 @@ A Fable-model review of the M4 diff found no critical or high-severity issues. A
 - Notifications and job history are append-only and grow (about 96 small scan jobs a day). A retention or cleanup step is planned with deployment (M6).
 
 **Results:** 208 tests passing (shared 7, db 62, api 130, worker 9). Live dev database: migration 008 applied; 25 tables with RLS; 0 public access.
+
+## 12. M4c: photo upload (2026-11-18)
+
+**Setup:** private Supabase Storage bucket `post-media` created with the owner's approval (`npm run create-media-bucket -w @the-pocket/api`; safe to re-run). Settings: public off, 10 MB limit, JPEG/PNG/WebP only.
+
+**Automated:** 214 tests passing (shared 7, db 62, api 136, worker 9). `media.test.ts` uses an in-memory store and checks:
+- upload links go to a fresh path inside this restaurant and post; viewers cannot upload; other tenants get 404
+- the server checks the file's real type from its first bytes, enforces the size limit, refuses paths from other posts and `../`, and fingerprints the file
+- the photo is saved as a new version whose digest changes, so an approved post needs approval again
+- view links are short-lived (300 s) and tenant-scoped; removal works; posted posts are locked; with no storage configured the routes answer 503
+
+**Live check** (one test file, deleted afterwards):
+- upload with a one-time link: OK; server download matches
+- reusing the link to overwrite: **refused**
+- anonymous download: **refused**; anonymous listing sees 0 files; public URL: **400**
+- signed view link: 200

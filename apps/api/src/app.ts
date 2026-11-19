@@ -16,6 +16,7 @@ import {
 import { buildRoutes } from './routes.js';
 import type { PolicyRouter } from './policy.js';
 import type { AiProvider } from './ai/provider.js';
+import type { MediaStore } from './media/store.js';
 
 export interface AppDeps {
   db: Db;
@@ -26,6 +27,8 @@ export interface AppDeps {
   rateLimits?: { perIp?: RateLimitOptions; perUser?: RateLimitOptions; ai?: RateLimitOptions };
   /** The AI provider, or null when none is configured. Defaults to null. */
   ai?: AiProvider | null;
+  /** Private photo storage; absent when the Supabase secret key is not configured (photo routes answer 503). */
+  media?: MediaStore;
   /** Monthly AI budget in US dollars (estimated cost). Defaults to 25. */
   aiBudgetUsd?: number;
 }
@@ -54,6 +57,7 @@ export function createApp(deps: AppDeps): { app: express.Express; policies: Poli
     ai: deps.ai ?? null,
     aiBudgetUsd: deps.aiBudgetUsd ?? 25,
     aiLimit,
+    media: deps.media,
   });
   const perIp = rateLimit({
     windowMs: FIVE_MINUTES,

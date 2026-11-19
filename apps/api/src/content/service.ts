@@ -36,11 +36,13 @@ interface VersionRow {
   digest: string;
   knowledge_version_ids: string[];
   sources_removed: string[];
+  media_path: string | null;
+  media_sha256: string | null;
 }
 
 const VERSION_SELECT = `
   SELECT v.id, v.item_id, v.version, v.channel, v.audience, v.angle, v.caption, v.photo_plan, v.scheduled_for,
-         v.origin, v.created_by, p.name AS created_by_name, v.created_at, v.digest, v.knowledge_version_ids, v.sources_removed
+         v.origin, v.created_by, p.name AS created_by_name, v.created_at, v.digest, v.knowledge_version_ids, v.sources_removed, v.media_path, v.media_sha256
     FROM content_versions v JOIN profiles p ON p.user_id = v.created_by`;
 
 interface ApprovalRow {
@@ -142,6 +144,7 @@ const toVersion = (r: VersionRow, all: Map<string, PostSource>): PostVersionView
   createdAt: iso(r.created_at)!,
   digest: r.digest,
   sources: sourcesOf(r, all),
+  media: r.media_sha256 ? { sha256: r.media_sha256 } : null,
   removedSources: r.sources_removed.map((id) => all.get(id)).filter((s): s is PostSource => !!s),
 });
 
@@ -422,12 +425,15 @@ export async function createPost(db: Db, actor: AuthContext, input: CreatePostIn
 }
 
 export interface EditPostInput {
-  caption: string;
+  /** Omitted: keep the current text (used when only the photo changes). */
+  caption?: string;
   angle?: string;
   photoPlan?: string;
   channel?: PostVersionView['channel'];
   audience?: PostVersionView['audience'];
   scheduledFor?: string | null;
+  /** Server-verified photo (never from the request body directly). null removes it; omitted keeps it. */
+  media?: { path: string; sha256: string } | null;
 }
 
 export type EditOutcome = { versionId: string; version: number; supersededApproval: boolean } | 'not_found' | 'archived' | 'posted';
@@ -447,8 +453,8 @@ export async function editPost(db: Db, actor: AuthContext, itemId: string, input
     const { ids: sources, removed } = await refreshSources(tx, actor.restaurantId, prev!.knowledge_version_ids);
     const next = prev!.version + 1;
     const [v] = await tx.query<{ id: string; digest: string }>(
-      `INSERT INTO content_versions (item_id, restaurant_id, version, channel, audience, angle, caption, photo_plan, scheduled_for, knowledge_version_ids, sources_removed, origin, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::uuid[], $12::uuid[], 'human', $11) RETURNING id, digest`,
+      `INSERT INTO content_versions (item_id, restaurant_id, version, channel, audience, angle, caption, photo_plan, scheduled_for, knowledge_version_ids, sources_removed, origin, created_by, media_path, media_sha256)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::uuid[], $12::uuid[], 'human', $11, $13, $14) RETURNING id, digest`,
       [
         itemId,
         actor.restaurantId,
@@ -456,12 +462,14 @@ export async function editPost(db: Db, actor: AuthContext, itemId: string, input
         input.channel ?? prev!.channel,
         input.audience ?? prev!.audience,
         input.angle ?? prev!.angle,
-        input.caption,
+        input.caption ?? prev!.caption,
         input.photoPlan ?? prev!.photo_plan,
         input.scheduledFor === undefined ? prev!.scheduled_for : input.scheduledFor,
         sources,
         actor.userId,
         removed,
+        input.media === undefined ? prev!.media_path : (input.media?.path ?? null),
+        input.media === undefined ? prev!.media_sha256 : (input.media?.sha256 ?? null),
       ],
     );
     await recordAudit(tx, {

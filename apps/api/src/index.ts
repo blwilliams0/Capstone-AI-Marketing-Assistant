@@ -6,6 +6,7 @@ import { createSupabaseVerifier } from './auth/tokens.js';
 import { loadConfig } from './config.js';
 import { createClaudeAiProvider, createClaudeClient } from './ai/claude.js';
 import { createMockAiProvider } from './ai/provider.js';
+import { createSupabaseMediaStore } from './media/store.js';
 
 const config = loadConfig(); // throws (and the process exits) on unsafe or incomplete configuration
 
@@ -44,7 +45,12 @@ const ai =
       ? createMockAiProvider()
       : null;
 
-const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd });
+const media =
+  config.supabaseUrl && config.supabaseSecretKey
+    ? createSupabaseMediaStore({ supabaseUrl: config.supabaseUrl, secretKey: config.supabaseSecretKey })
+    : undefined;
+
+const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd, media });
 
 const server = app.listen(config.port, () => {
   console.log(

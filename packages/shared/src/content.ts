@@ -107,6 +107,8 @@ export interface PostVersionView {
   sources: PostSource[];
   /** Sources an edit removed because that rule or fact was retired or expired. */
   removedSources: PostSource[];
+  /** The approved photo, identified by its SHA-256 fingerprint (view it through /api/posts/:id/media). */
+  media: { sha256: string } | null;
 }
 
 export interface ApprovalView {

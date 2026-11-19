@@ -4,12 +4,13 @@ import { CHANNEL_LABELS, type ReadyToPostCard } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, Card, buttonClass, inputClass, secondaryButtonClass } from '../ui';
 import { VersionBody, shortPrint } from './PostDetail';
+import { PostPhoto } from './PostPhoto';
 
 const WHERE_TO_POST: Record<string, string> = {
-  instagram: 'Open Instagram on the restaurant account, create a post, add the photos, then paste the text.',
-  facebook: 'Open the restaurant Facebook Page, create a post, add the photos, then paste the text.',
+  instagram: 'Open Instagram on the restaurant account, create a post, add the approved photo (download it above) or the photos from the photo plan, then paste the text.',
+  facebook: 'Open the restaurant Facebook Page, create a post, add the approved photo (download it above) or the photos from the photo plan, then paste the text.',
   email: 'Open your email tool, start a campaign to opted-in guests only, and paste the text (first line is the subject).',
-  google_business: 'Open the Google Business Profile, choose "Add update", add a photo and paste the text.',
+  google_business: 'Open the Google Business Profile, choose "Add update", add the approved photo and paste the text.',
   website: 'Open the website editor and paste the text in the right place.',
 };
 
@@ -47,6 +48,7 @@ function ReadyCard({ card, onDone }: { card: ReadyToPostCard; onDone: (msg: stri
           </Alert>
         ))}
         <VersionBody v={card.version} />
+        <PostPhoto itemId={card.itemId} versionId={card.version.id} sha256={card.version.media?.sha256 ?? null} canEdit={false} approved />
         {!blocked && (
           <>
             <button
