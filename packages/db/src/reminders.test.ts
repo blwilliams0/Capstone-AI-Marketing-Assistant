@@ -118,5 +118,8 @@ describe('reminder scan', () => {
     await expect(
       db.query(`INSERT INTO notifications (restaurant_id, recipient_user_id, kind, title, body, link, dedupe_key) VALUES ($1, $2, 'post_due', 't', 'b', 'https://evil.example', 'k')`, [rid, u.admin]),
     ).rejects.toThrow();
+    await expect(
+      db.query(`INSERT INTO notifications (restaurant_id, recipient_user_id, kind, title, body, link, dedupe_key) VALUES ($1, $2, 'post_due', 't', 'b', '//evil', 'k2')`, [rid, u.admin]),
+    ).rejects.toThrow();
   });
 });

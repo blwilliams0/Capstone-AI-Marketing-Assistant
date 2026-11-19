@@ -228,8 +228,11 @@ const ITEM_SELECT = `
   SELECT i.id, i.title, i.created_by, p.name AS created_by_name, i.created_at, i.archived_at
     FROM content_items i JOIN profiles p ON p.user_id = i.created_by`;
 
-export async function listPosts(db: Db, restaurantId: string, opts: { includeArchived?: boolean } = {}): Promise<PostSummary[]> {
-  const items = await db.query<ItemRow>(`${ITEM_SELECT} WHERE i.restaurant_id = $1 ORDER BY i.created_at DESC LIMIT 200`, [restaurantId]);
+/** Post summaries: the 200 newest, or exactly the given posts (for the calendar). */
+export async function listPosts(db: Db, restaurantId: string, opts: { includeArchived?: boolean; itemIds?: string[] } = {}): Promise<PostSummary[]> {
+  const items = opts.itemIds
+    ? await db.query<ItemRow>(`${ITEM_SELECT} WHERE i.restaurant_id = $1 AND i.id = ANY($2::uuid[]) ORDER BY i.created_at DESC`, [restaurantId, opts.itemIds])
+    : await db.query<ItemRow>(`${ITEM_SELECT} WHERE i.restaurant_id = $1 ORDER BY i.created_at DESC LIMIT 200`, [restaurantId]);
   if (items.length === 0) return [];
   const ids = items.map((i) => i.id);
   const latest = await db.query<VersionRow>(

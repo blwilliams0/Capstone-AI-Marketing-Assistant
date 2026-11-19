@@ -325,3 +325,22 @@ Drafts cost more than questions (about 3,000 output tokens), so about 7–8 cent
 **Live dev database:** migration 007 applied. 25 tables, all with RLS, and 0 public access. One live reminder scan ran cleanly and created 0 reminders (nothing scheduled yet).
 
 **No AI calls and no paid services:** reminders are in-app only.
+
+## 11. M4 security review fixes (2026-11-18)
+
+A Fable-model review of the M4 diff found no critical or high-severity issues. All findings were fixed:
+- Saving an interview suggestion re-checks its quotes against the latest answers (409 `quotes_changed`) and is refused once AI consent is withdrawn (409 `no_consent`), since saved rules and quotes later reach the AI as brand knowledge. The confirmation text now says exactly what withdrawing does.
+- Follow-up question text and names are flattened to one line with no tags or quotes before going into prompts, so they cannot forge another manager's answers.
+- Quotes must be at least 3 words or 12 characters; at most 5 per suggestion; the source note keeps whole quotes only.
+- Disagreements are labelled as the assistant's summary, not checked word for word.
+- A saved suggestion shows the wording actually saved, and the audit records whether it was edited first.
+- The calendar uses a date-filtered query, so older scheduled posts can't drop off.
+- Reminder scans run in the background of `GET /notifications`.
+- Overdue reminders cover the last 14 days only, so there is no backlog on first scan or for new staff.
+- Migration 008: interview triggers lock the session row (`FOR SHARE`); reminder links must be `/name/...` (no `//host`). Consent withdrawn while the AI is working stores nothing.
+
+**Accepted, documented:**
+- Two browser tabs suggesting a follow-up to the same question at the same moment can get the same follow-up ID; the later answer wins (both are kept in history).
+- Notifications and job history are append-only and grow (about 96 small scan jobs a day). A retention or cleanup step is planned with deployment (M6).
+
+**Results:** 208 tests passing (shared 7, db 62, api 130, worker 9). Live dev database: migration 008 applied; 25 tables with RLS; 0 public access.

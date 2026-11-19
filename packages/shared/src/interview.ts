@@ -168,12 +168,12 @@ export interface InterviewProposal {
   body: string;
   /** Verbatim quotes from this interview that support the proposal (checked by the server). */
   support: { questionId: string; quote: string }[];
-  /** Where another manager's answers or an approved rule disagree. Recorded, not resolved. */
+  /** The AI's summary of disagreements with other managers or approved rules. Not checked word for word. */
   conflicts: string[];
   /** For facts: who must confirm it and how long it stays true. */
   verifyWith: string;
   /** Set once someone has saved it to the knowledge library as a proposal. */
-  savedAs: { itemId: string; versionId: string } | null;
+  savedAs: { itemId: string; versionId: string; kind: 'brand_rule' | 'fact'; title: string; body: string } | null;
 }
 
 export interface InterviewExtraction {

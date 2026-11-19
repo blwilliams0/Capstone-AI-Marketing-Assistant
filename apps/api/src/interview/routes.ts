@@ -123,6 +123,8 @@ export function addInterviewRoutes(r: PolicyRouter, deps: AiDeps, aiLimit: Reque
     const out = await saveProposal(db, req.auth!, p.data.sessionId, b.data, req.requestId);
     if (out === 'not_found') return fail(res, 404, 'That suggestion was not found.', out);
     if (out === 'already_saved') return fail(res, 409, 'That suggestion has already been saved.', out);
+    if (out === 'no_consent') return fail(res, 409, 'AI consent was withdrawn for this interview, so its suggestions can no longer be saved. Write the rule by hand in Knowledge.', out);
+    if (out === 'quotes_changed') return fail(res, 409, 'The answers have changed since this was drafted, so its quotes no longer match. Draft brand rules again.', out);
     res.status(201).json({ ...out, status: 'proposed' });
   });
 }

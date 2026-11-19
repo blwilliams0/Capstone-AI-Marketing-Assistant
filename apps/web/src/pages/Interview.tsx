@@ -153,8 +153,8 @@ function ProposalCard({ p, index, extraction, sessionId, canSave, onSaved }: { p
     <div className="space-y-2 rounded-md border border-stone-200 p-4">
       {p.savedAs ? (
         <>
-          <p className="font-medium">{p.title}</p>
-          <p className="text-sm">{p.body}</p>
+          <p className="font-medium">{p.savedAs.title}</p>
+          <p className="text-sm">{p.savedAs.body}</p>
           <Alert kind="success">
             Saved to the knowledge library as a proposal.{' '}
             <Link to="/knowledge" className="underline">
@@ -187,7 +187,7 @@ function ProposalCard({ p, index, extraction, sessionId, canSave, onSaved }: { p
       {p.verifyWith && <p className="text-xs text-stone-600">Verify with: {p.verifyWith}</p>}
       {p.conflicts.length > 0 && (
         <div className="rounded bg-amber-50 p-2 text-xs text-amber-900">
-          <p className="font-medium">Disagreement to raise with management (not resolved here):</p>
+          <p className="font-medium">Possible disagreement to raise with management (the assistant’s summary, not checked word for word; not resolved here):</p>
           <ul className="list-disc pl-5">
             {p.conflicts.map((c, i) => (
               <li key={i}>{c}</li>
@@ -290,7 +290,7 @@ export function Interview() {
               <button
                 className={secondaryButtonClass}
                 disabled={busy !== null}
-                onClick={() => void act('withdraw', `/api/interviews/${detail.id}/withdraw-ai-consent`, 'Stop all AI use for this interview? This cannot be undone.')}
+                onClick={() => void act('withdraw', `/api/interviews/${detail.id}/withdraw-ai-consent`, 'Stop AI use for this interview from now on? No more follow-up suggestions or drafted rules, and suggestions already drafted can no longer be saved. Rules already saved stay in Knowledge for an administrator to decide. This cannot be undone.')}
               >
                 They withdrew AI consent
               </button>
@@ -301,7 +301,7 @@ export function Interview() {
           {latest && (
             <div className="space-y-3">
               <p className="text-sm text-stone-600">
-                Suggestions from {new Date(latest.createdAt).toLocaleString()}. Every quote was checked word for word against the answers above. Edit the wording if you like, then save the
+                Suggestions from {new Date(latest.createdAt).toLocaleString()}. Every quote was checked word for word against the answers, and is checked again when you save. Edit the wording if you like, then save the
                 ones worth keeping. They go to Knowledge as <strong>proposals</strong>; only an administrator can approve them.
               </p>
               {latest.provider === 'mock' && <Alert kind="info">Practice mode: these suggestions are placeholders because no AI service is connected.</Alert>}

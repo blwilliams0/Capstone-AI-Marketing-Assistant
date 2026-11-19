@@ -31,7 +31,7 @@ export async function runReminderScan(db: Db, restaurantId: string, now: Date = 
         AND v.scheduled_for > $2::timestamptz AND v.scheduled_for <= $2::timestamptz + interval '24 hours'
      ON CONFLICT (recipient_user_id, dedupe_key) DO NOTHING`,
 
-    // Approved, scheduled more than 2 hours ago, still not recorded as posted.
+    // Approved, scheduled 2 hours to 14 days ago, still not recorded as posted (older ones are not re-announced).
     `INSERT INTO notifications (restaurant_id, recipient_user_id, kind, title, body, link, dedupe_key)
      SELECT $1, s.user_id, 'post_overdue', left('Not posted yet: ' || i.title, 200),
             'It was scheduled for ' || ${when('v.scheduled_for')} || '. Post it now, or edit the date (it will need approving again).',
@@ -43,6 +43,7 @@ export async function runReminderScan(db: Db, restaurantId: string, now: Date = 
       WHERE a.restaurant_id = $1 AND a.status = 'approved'
         AND NOT EXISTS (SELECT 1 FROM post_records r WHERE r.approval_id = a.id)
         AND v.scheduled_for <= $2::timestamptz - interval '2 hours'
+        AND v.scheduled_for > $2::timestamptz - interval '14 days'
      ON CONFLICT (recipient_user_id, dedupe_key) DO NOTHING`,
 
     // Scheduled within 48 hours but not yet submitted for approval: remind whoever started it.

@@ -60,7 +60,12 @@ describe('calendar', () => {
 
 describe('notifications', () => {
   it('reminds staff when an approved post is due, only once, and each person sees only their own', async () => {
-    const res = await as(contributor).get('/api/notifications');
+    // The scan runs in the background; reminders appear on a following check.
+    let res = await as(contributor).get('/api/notifications');
+    for (let i = 0; i < 50 && !res.body.notifications.some((n: { kind: string }) => n.kind === 'post_due'); i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      res = await as(contributor).get('/api/notifications');
+    }
     expect(res.status).toBe(200);
     const due = (res.body.notifications as { kind: string; title: string; link: string; id: string }[]).filter((n) => n.kind === 'post_due');
     expect(due.map((n) => n.title)).toContain('Time to post: Soon');

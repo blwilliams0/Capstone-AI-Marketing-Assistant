@@ -18,6 +18,12 @@ import { createItemTx } from '../knowledge/service.js';
 import type { AuthContext } from '../types.js';
 
 const iso = (d: Date | string | null): string | null => (d === null ? null : new Date(d).toISOString());
+
+/** Untrusted short text placed in a prompt: no tags, quotes or line breaks, so it cannot forge structure. */
+const oneLine = (s: string) => s.replace(/[<>"]/g, '').replace(/\s+/g, ' ').trim();
+
+/** A supporting quote must say something: at least 3 words or 12 characters. */
+const isSubstantial = (normalizedQuote: string) => normalizedQuote.split(' ').length >= 3 || normalizedQuote.length >= 12;
 const GUIDE = new Map(INTERVIEW_QUESTIONS.map((q) => [q.id, q]));
 const baseId = (questionId: string) => questionId.split('.')[0]!;
 
@@ -86,8 +92,13 @@ export async function getInterview(db: Db, restaurantId: string, sessionId: stri
     `SELECT id, result, created_at FROM interview_extractions WHERE session_id = $1 ORDER BY created_at DESC LIMIT 5`,
     [sessionId],
   );
-  const saves = await db.query<{ extraction_id: string; proposal_index: number; knowledge_item_id: string; knowledge_version_id: string }>(
-    `SELECT extraction_id, proposal_index, knowledge_item_id, knowledge_version_id FROM interview_proposal_saves WHERE extraction_id = ANY($1::uuid[])`,
+  // What was actually saved (the reviewer may have edited the suggestion first).
+  const saves = await db.query<{ extraction_id: string; proposal_index: number; knowledge_item_id: string; knowledge_version_id: string; kind: 'brand_rule' | 'fact'; title: string; body: string }>(
+    `SELECT ps.extraction_id, ps.proposal_index, ps.knowledge_item_id, ps.knowledge_version_id, ki.kind, ki.title, kv.body
+       FROM interview_proposal_saves ps
+       JOIN knowledge_items ki ON ki.id = ps.knowledge_item_id
+       JOIN knowledge_versions kv ON kv.id = ps.knowledge_version_id
+      WHERE ps.extraction_id = ANY($1::uuid[])`,
     [extractions.map((e) => e.id)],
   );
   return {
@@ -99,7 +110,10 @@ export async function getInterview(db: Db, restaurantId: string, sessionId: stri
       createdAt: iso(e.created_at)!,
       proposals: e.result.proposals.map((p, i) => {
         const saved = saves.find((x) => x.extraction_id === e.id && x.proposal_index === i);
-        return { ...p, savedAs: saved ? { itemId: saved.knowledge_item_id, versionId: saved.knowledge_version_id } : null };
+        return {
+          ...p,
+          savedAs: saved ? { itemId: saved.knowledge_item_id, versionId: saved.knowledge_version_id, kind: saved.kind, title: saved.title, body: saved.body } : null,
+        };
       }),
     })),
   };
@@ -205,7 +219,7 @@ export async function suggestFollowUp(deps: AiDeps, actor: AuthContext, sessionI
     return { followUp: q.followUp ?? 'Can you give an example?', questionId: next, source: 'guide' };
   }
   const ai = await guard(deps, actor, 'interview');
-  const transcript = answers.map((a) => `Q: ${a.questionText}\nA: ${a.answer.replace(/[<>]/g, '')}`).join('\n\n');
+  const transcript = answers.map((a) => `Q: ${oneLine(a.questionText)}\nA: ${a.answer.replace(/[<>]/g, '')}`).join('\n\n');
   const prompt = `<interview_excerpt>\n${transcript}\n</interview_excerpt>\n\nThe interview guide suggests this follow-up, if useful: "${q.followUp ?? ''}"\nSuggest the next follow-up question.`;
   const res = await callProvider(deps, actor, 'interview', ai, () =>
     ai.structured({
@@ -261,26 +275,35 @@ export const normalizeForQuote = (s: string) =>
 
 const MAX_PROPOSALS = 25;
 
+/** True when a quote appears (after normalising) in that interviewee's current answer to the cited question. */
+function quoteMatcher(answers: InterviewAnswerView[]) {
+  const byId = new Map(answers.map((a) => [a.questionId, normalizeForQuote(a.answer)]));
+  return (s: { questionId: string; quote: string }) => {
+    const answer = byId.get(s.questionId);
+    const quote = normalizeForQuote(s.quote);
+    return !!answer && isSubstantial(quote) && answer.includes(quote);
+  };
+}
+
 /**
  * Keeps only proposals whose quotes really appear in the interviewee's answers. Unsupported quotes
  * are removed; a proposal left with no support is dropped. The model can therefore never attribute
  * words to a manager that they did not say.
  */
 export function checkExtraction(out: ExtractionOutput, answers: InterviewAnswerView[], docs: Parameters<typeof scrubDocumentKeys>[1]): Pick<InterviewExtraction, 'proposals' | 'openQuestions' | 'warnings'> {
-  const byId = new Map(answers.map((a) => [a.questionId, normalizeForQuote(a.answer)]));
+  const matches = quoteMatcher(answers);
   let droppedQuotes = 0;
   let droppedProposals = 0;
   const proposals: InterviewProposal[] = [];
   for (const p of out.proposals.slice(0, MAX_PROPOSALS)) {
     const support = p.support
-      .map((s) => ({ questionId: s.question_id.trim(), quote: s.quote.trim().slice(0, 500) }))
+      .map((s) => ({ questionId: s.question_id.trim(), quote: s.quote.trim().slice(0, 300) }))
       .filter((s) => {
-        const answer = byId.get(s.questionId);
-        const quote = normalizeForQuote(s.quote);
-        const ok = !!answer && quote.length >= 3 && answer.includes(quote);
+        const ok = matches(s);
         if (!ok) droppedQuotes++;
         return ok;
-      });
+      })
+      .slice(0, 5);
     if (support.length === 0) {
       droppedProposals++;
       continue;
@@ -315,8 +338,8 @@ export async function extractProposals(deps: AiDeps, actor: AuthContext, session
   const ai = await guard(deps, actor, 'extract');
 
   const docs = await brandCoreDocuments(db, actor.restaurantId);
-  const who = `${s.interviewee_name}${s.interviewee_role ? ` (${s.interviewee_role})` : ''}`.replace(/[<>"]/g, '');
-  const mine = answers.map((a) => `[${a.questionId}] Q: ${a.questionText}\nA: ${a.answer.replace(/[<>]/g, '')}`).join('\n\n');
+  const who = oneLine(`${s.interviewee_name}${s.interviewee_role ? ` (${s.interviewee_role})` : ''}`);
+  const mine = answers.map((a) => `[${a.questionId}] Q: ${oneLine(a.questionText)}\nA: ${a.answer.replace(/[<>]/g, '')}`).join('\n\n');
 
   // Other managers' answers to the same questions (only from interviews that allow AI use).
   const others = await db.query<{ name: string; question_id: string; answer: string }>(
@@ -330,7 +353,7 @@ export async function extractProposals(deps: AiDeps, actor: AuthContext, session
   );
   let otherText = '';
   for (const o of others) {
-    const line = `[${o.question_id}] ${o.name.replace(/[<>"]/g, '')}: ${o.answer.replace(/[<>]/g, '').replace(/\s+/g, ' ').slice(0, 600)}\n`;
+    const line = `[${o.question_id}] ${oneLine(o.name)}: ${o.answer.replace(/[<>]/g, '').replace(/\s+/g, ' ').slice(0, 600)}\n`;
     if (otherText.length + line.length > 12000) break;
     otherText += line;
   }
@@ -368,10 +391,17 @@ export async function extractProposals(deps: AiDeps, actor: AuthContext, session
     : { proposals: [], openQuestions: [], warnings: [res.refused ? "The assistant can't help with that request." : 'The assistant returned an unreadable result. Please try again.'] };
   const result = { ...checked, provider: ai.name };
 
-  const [row] = await db.query<{ id: string; created_at: Date | string }>(
-    `INSERT INTO interview_extractions (session_id, restaurant_id, result, created_by) VALUES ($1, $2, $3::jsonb, $4) RETURNING id, created_at`,
-    [sessionId, actor.restaurantId, JSON.stringify(result), actor.userId],
-  );
+  let row: { id: string; created_at: Date | string } | undefined;
+  try {
+    [row] = await db.query<{ id: string; created_at: Date | string }>(
+      `INSERT INTO interview_extractions (session_id, restaurant_id, result, created_by) VALUES ($1, $2, $3::jsonb, $4) RETURNING id, created_at`,
+      [sessionId, actor.restaurantId, JSON.stringify(result), actor.userId],
+    );
+  } catch (err) {
+    // Consent was withdrawn while the AI was working: keep nothing.
+    if (err instanceof Error && /did not agree to AI processing/.test(err.message)) return 'no_consent';
+    throw err;
+  }
   await recordAudit(db, {
     restaurantId: actor.restaurantId,
     actorUserId: actor.userId,
@@ -404,7 +434,7 @@ function mockExtraction(answers: InterviewAnswerView[]): ExtractionOutput {
 // ---------------------------------------------------------------------------------------------
 // Saving a suggestion to the knowledge library (always as a proposal)
 
-export type SaveProposalOutcome = { itemId: string; versionId: string } | 'not_found' | 'already_saved';
+export type SaveProposalOutcome = { itemId: string; versionId: string } | 'not_found' | 'already_saved' | 'no_consent' | 'quotes_changed';
 
 export async function saveProposal(
   db: Db,
@@ -414,10 +444,10 @@ export async function saveProposal(
   requestId?: string,
 ): Promise<SaveProposalOutcome> {
   return db.transaction(async (tx) => {
-    const [ex] = await tx.query<{ result: { proposals: InterviewProposal[] }; name: string; role: string | null; created_at: Date | string }>(
-      `SELECT e.result, s.interviewee_name AS name, s.interviewee_role AS role, s.created_at
+    const [ex] = await tx.query<{ result: { proposals: InterviewProposal[] }; name: string; role: string | null; created_at: Date | string; ai_consent: boolean }>(
+      `SELECT e.result, s.interviewee_name AS name, s.interviewee_role AS role, s.created_at, s.ai_consent
          FROM interview_extractions e JOIN interview_sessions s ON s.id = e.session_id
-        WHERE e.id = $1 AND e.session_id = $2 AND e.restaurant_id = $3 FOR UPDATE OF e`,
+        WHERE e.id = $1 AND e.session_id = $2 AND e.restaurant_id = $3 FOR UPDATE OF e, s`,
       [input.extractionId, sessionId, actor.restaurantId],
     );
     const proposal = ex?.result.proposals[input.index];
@@ -425,11 +455,32 @@ export async function saveProposal(
     if ((await tx.query(`SELECT 1 FROM interview_proposal_saves WHERE extraction_id = $1 AND proposal_index = $2`, [input.extractionId, input.index])).length) {
       return 'already_saved' as const;
     }
-    // The source note is built from the stored, verified quotes, never from the request.
+    // Saved rules (with their quotes) are later sent to the AI as brand knowledge, so they need consent.
+    if (!ex.ai_consent) return 'no_consent' as const;
+    // The answers may have been corrected since the suggestion was drafted: re-check every quote.
+    const matches = quoteMatcher(await latestAnswers(tx, sessionId));
+    if (!proposal.support.every(matches)) return 'quotes_changed' as const;
+
+    // The source note is built from the stored, verified quotes, never from the request. Whole
+    // quotes only: one that does not fit is left out rather than cut off mid-sentence.
     const date = new Date(ex.created_at).toISOString().slice(0, 10);
-    const quotes = proposal.support.map((s) => `${s.questionId}: “${s.quote}”`).join('; ');
-    const sourceNote = `Brand interview with ${ex.name}${ex.role ? ` (${ex.role})` : ''}, ${date}. ${quotes}`.slice(0, 500);
+    let sourceNote = `Brand interview with ${ex.name}${ex.role ? ` (${ex.role})` : ''}, ${date}.`;
+    for (const s of proposal.support) {
+      const part = ` ${s.questionId}: “${s.quote}”`;
+      if (sourceNote.length + part.length + 1 > 500) break;
+      sourceNote += (sourceNote.endsWith('.') ? '' : ';') + part;
+    }
+    const edited = input.title !== proposal.title || input.body !== proposal.body || input.kind !== proposal.kind;
     const created = await createItemTx(tx, actor, { kind: input.kind, title: input.title, body: input.body, sourceNote, origin: 'interview' }, requestId);
+    await recordAudit(tx, {
+      restaurantId: actor.restaurantId,
+      actorUserId: actor.userId,
+      action: 'interview.proposal_saved',
+      targetType: 'knowledge_version',
+      targetId: created.versionId,
+      details: { sessionId, extractionId: input.extractionId, index: input.index, editedBeforeSaving: edited },
+      requestId,
+    });
     await tx.query(
       `INSERT INTO interview_proposal_saves (extraction_id, proposal_index, knowledge_item_id, knowledge_version_id, saved_by) VALUES ($1, $2, $3, $4, $5)`,
       [input.extractionId, input.index, created.itemId, created.versionId, actor.userId],

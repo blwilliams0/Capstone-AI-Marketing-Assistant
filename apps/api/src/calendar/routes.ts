@@ -26,7 +26,8 @@ export function addCalendarRoutes(r: PolicyRouter, db: Db) {
 
   r.get('/notifications', 'member', async (req, res) => {
     const a = req.auth!;
-    await maybeScan(a.restaurantId);
+    // In the background: the reply never waits for a scan (new reminders show on the next check).
+    void maybeScan(a.restaurantId);
     const rows = await db.query<{ id: string; kind: NotificationView['kind']; title: string; body: string; link: string; created_at: Date | string; read_at: unknown }>(
       `SELECT id, kind, title, body, link, created_at, read_at FROM notifications
         WHERE recipient_user_id = $1 AND restaurant_id = $2
@@ -72,13 +73,19 @@ export function addCalendarRoutes(r: PolicyRouter, db: Db) {
     const to = new Date(`${q.data.to}T00:00:00Z`);
     to.setUTCDate(to.getUTCDate() + 2);
 
-    const posts = await listPosts(db, a.restaurantId);
-    const scheduled = await db.query<{ item_id: string; scheduled_for: Date | string | null }>(
-      `SELECT DISTINCT ON (item_id) item_id, scheduled_for FROM content_versions
-        WHERE restaurant_id = $1 ORDER BY item_id, version DESC`,
-      [a.restaurantId],
+    // Each post's latest version decides its date: posts scheduled in range, plus undated open posts.
+    const latest = await db.query<{ item_id: string; scheduled_for: Date | string | null }>(
+      `SELECT v.item_id, v.scheduled_for
+         FROM content_items i
+         JOIN LATERAL (SELECT item_id, scheduled_for FROM content_versions cv WHERE cv.item_id = i.id ORDER BY cv.version DESC LIMIT 1) v ON true
+        WHERE i.restaurant_id = $1 AND i.archived_at IS NULL
+          AND ((v.scheduled_for >= $2 AND v.scheduled_for < $3)
+               OR (v.scheduled_for IS NULL AND NOT EXISTS (SELECT 1 FROM post_records r WHERE r.item_id = i.id)))
+        ORDER BY i.created_at DESC LIMIT 300`,
+      [a.restaurantId, from.toISOString(), to.toISOString()],
     );
-    const when = new Map(scheduled.map((s) => [s.item_id, s.scheduled_for]));
+    const when = new Map(latest.map((s) => [s.item_id, s.scheduled_for]));
+    const posts = latest.length ? await listPosts(db, a.restaurantId, { itemIds: latest.map((s) => s.item_id) }) : [];
     const facts = await db.query<{ item_id: string; title: string; expires_at: Date | string }>(
       `SELECT ki.id AS item_id, ki.title, kv.expires_at FROM knowledge_versions kv JOIN knowledge_items ki ON ki.id = kv.item_id AND ki.retired_at IS NULL
         WHERE kv.restaurant_id = $1 AND kv.status = 'approved' AND kv.expires_at >= $2 AND kv.expires_at < $3 ORDER BY kv.expires_at`,
