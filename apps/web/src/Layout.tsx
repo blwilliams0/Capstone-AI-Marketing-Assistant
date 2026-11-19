@@ -16,6 +16,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/posts', label: 'Posts', needs: 'content.view' },
   { to: '/ready', label: 'Ready to post', needs: 'post.record' },
   { to: '/knowledge', label: 'Knowledge', needs: 'knowledge.view' },
+  { to: '/interviews', label: 'Interviews', needs: 'interview.conduct' },
   { to: '/activity', label: 'Activity', needs: 'content.view' },
   { to: '/staff', label: 'Staff', needs: 'users.manage' },
 ];

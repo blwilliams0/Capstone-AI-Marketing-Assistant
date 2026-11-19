@@ -14,6 +14,19 @@ export interface ContextLimits {
 
 export const DEFAULT_LIMITS: ContextLimits = { maxSections: 8, sectionTokenBudget: 6000 };
 
+/** The brand core only (approved, current brand rules and facts), keyed D1, D2... in a stable order. */
+export async function brandCoreDocuments(db: Db, restaurantId: string): Promise<AiDocument[]> {
+  const core = await getBrandCore(db, restaurantId);
+  return core.entries.map((e, i) => ({
+    key: `D${i + 1}`,
+    title: e.title,
+    text: e.sourceNote ? `${e.body}\n\n(Source: ${e.sourceNote})` : e.body,
+    versionId: e.versionId,
+    kind: e.kind,
+    core: true,
+  }));
+}
+
 /**
  * Builds the documents for one AI request:
  * 1. the brand core (approved, current brand rules and facts) - always, first, in a stable order;
@@ -27,17 +40,8 @@ export async function buildContext(
   query: string,
   limits: ContextLimits = DEFAULT_LIMITS,
 ): Promise<AiDocument[]> {
-  const core = await getBrandCore(db, restaurantId);
-  const docs: AiDocument[] = core.entries.map((e, i) => ({
-    key: `D${i + 1}`,
-    title: e.title,
-    text: e.sourceNote ? `${e.body}\n\n(Source: ${e.sourceNote})` : e.body,
-    versionId: e.versionId,
-    kind: e.kind,
-    core: true,
-  }));
-
-  const coreVersions = new Set(core.entries.map((e) => e.versionId));
+  const docs = await brandCoreDocuments(db, restaurantId);
+  const coreVersions = new Set(docs.map((d) => d.versionId));
   const hits = await searchSections(db, restaurantId, query, limits.maxSections * 2);
   let used = 0;
   let added = 0;

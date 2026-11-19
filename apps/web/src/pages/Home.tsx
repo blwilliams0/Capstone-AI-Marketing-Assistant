@@ -7,6 +7,7 @@ import { Card } from '../ui';
 export const CAPABILITY_LABELS: Record<string, string> = {
   'knowledge.view': 'Read approved marketing material',
   'knowledge.propose': 'Suggest new brand rules, facts and documents',
+  'interview.conduct': 'Run brand interviews with management',
   'assistant.use': 'Ask the marketing assistant',
   'analytics.view': 'See marketing reports',
   'content.view': 'See posts and their approval history',
@@ -61,6 +62,12 @@ export function Home() {
           <Link to="/knowledge" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
             <p className="font-medium">Manage The Pocket's knowledge</p>
             <p className="text-sm text-stone-600">Approved brand rules, verified facts, the marketing strategy and research.</p>
+          </Link>
+        )}
+        {can('interview.conduct') && (
+          <Link to="/interviews" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
+            <p className="font-medium">Brand interview</p>
+            <p className="text-sm text-stone-600">Capture management&apos;s view of the brand in their own words, then turn it into proposed brand rules.</p>
           </Link>
         )}
         {can('users.manage') && (

@@ -279,3 +279,24 @@ Results:
 | 2 | 2,851 | 3,039 | 2,189 | 0 | $0.0726 | All three openings new; one option flagged its overlap with draft 1's idea and explained the difference |
 
 Drafts cost more than questions (about 3,000 output tokens), so about 7–8 cents each. Total live spend to date: about $0.21.
+
+## 9. M4a: brand interview in the app (2026-11-18)
+
+**Automated:** 194 tests passing (shared 7, db 57, api 123, worker 7). Build, strict typecheck, lint and bundle scan clean.
+
+`interview.test.ts` (9 tests) covers:
+- notes consent is required, and viewers can't run interviews
+- guide questions keep the guide's wording, and answers are append-only (latest wins)
+- completed interviews are locked
+- without AI consent nothing is sent to the AI, guide follow-ups are used instead, and consent cannot be added afterwards
+- AI follow-ups take the next free ID; withdrawing consent stops AI use
+- drafted rules keep only quotes found word for word in the answers, and unsupported suggestions are dropped
+- other managers' answers are given for spotting disagreements
+- saved suggestions are knowledge **proposals** with a source note built from the verified quotes, saved once only, and approvable only by an administrator
+- tenant isolation
+
+**Known flake:** `interview.test.ts` crashed twice with the Windows PGlite worker error (0xC0000409), then passed alone and in two full runs. This is the same platform issue as before (see Known limitations), not a test failure.
+
+**Live dev database:** migration 006 applied. 24 tables, all with RLS. 0 public-role grants on tables, 0 executable functions, 0 sequence access.
+
+**Live AI:** not run. A live test would create a permanent interview record in the real database, so the first real use is the owner's interview with management. Expected costs: a follow-up suggestion is about 1 cent (low effort); drafting rules from a full interview is roughly 15–30 cents (high effort, long input). Not yet measured.
