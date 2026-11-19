@@ -221,3 +221,21 @@ Started with no `ANTHROPIC_API_KEY` and no `NODE_ENV`: startup log `aiMode: disa
 - Any live Claude request (no API key yet). The exact request shape is unit-tested against the installed SDK's types and a fake client only.
 - The new screens (sign-in recovery, staff, knowledge, ask, create a post) in a browser.
 - Real sign-in end to end.
+
+## 7. First live Claude check (2026-11-18)
+
+Owner added an Anthropic Console API key to `.env.local` (not shown to or by Claude Code). API restarted with `"aiMode":"claude"`.
+
+Run with `npm run ai-live-check -w @the-pocket/api` (new script: one real question as the first active admin, through the same `ask()` code the app uses; prints the answer, sources and usage, never keys).
+
+| # | Question | Input tok | Output tok | Cache read | Cache write | Est. cost |
+|---|---|---|---|---|---|---|
+| 1 | "What tone should our Instagram captions use, and what should we avoid?" | 2,627 | 960 | 0 | 2,138 | $0.0404 |
+| 2 | "x" (sent by mistake while checking the log; the script now rejects questions under 3 characters) | 6 | 780 | 2,138 | 0 | $0.0161 |
+
+Results:
+- Model `claude-opus-5-5`, outcome `ok`, not refused. Answer used the 3 approved brand rules (brand core) plus 8 strategy/reference sections chosen by full-text search.
+- Citations mapped back to approved knowledge versions, with quotes. Answer kept brand rules apart from research ideas and listed what management still needs to confirm.
+- Prompt caching confirmed: call 2 read the 2,138-token brand core from cache.
+- Usage events recorded in `ai_usage_events`; 2 conversations stored under the admin account.
+- Total spend so far: about $0.056.

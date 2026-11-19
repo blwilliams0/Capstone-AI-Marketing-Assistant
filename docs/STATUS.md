@@ -60,6 +60,11 @@ Last updated: 2026-11-13 (end of the overnight coding run). Labels: *working in 
 - **Administrators can read staff assistant conversations.** Today conversations are private to the asker. Staff should be told plainly that management can read them before this is turned on.
 - **Controlled guardrails** on what the assistant will discuss or draft (scope to be defined with management: for example topic limits, banned claims, escalation to a manager).
 
+## Requested for M3 (owner, 2026-11-18)
+
+- **Avoid repeating ideas.** Draft a post receives a short summary (date, channel, angle, opening line) of recent posts: approved or posted posts from the last 6 months, plus generated draft angles from the last 30 days. The model is told to pick a fresh angle and to flag any close repeats. Records are kept for history; the time window only limits what is sent to the AI (about 1–2k tokens).
+- **Bug:** a draft's "Please confirm" text said "brand rule documents (D1–D3)", leaking internal document keys. Replace keys with document titles in output, or tell the model not to mention them.
+
 ## Known limitations
 
 - Rate-limit counters are in memory (one API process). Fine for one restaurant; revisit if the API ever runs as several processes. Behind a hosting proxy, Express `trust proxy` must be set so limits see real client IPs (deployment task).
