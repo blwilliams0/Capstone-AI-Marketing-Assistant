@@ -13,7 +13,10 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Home' },
   { to: '/assistant', label: 'Ask', needs: 'assistant.use' },
   { to: '/create', label: 'Create a post', needs: 'content.draft' },
+  { to: '/posts', label: 'Posts', needs: 'content.view' },
+  { to: '/ready', label: 'Ready to post', needs: 'post.record' },
   { to: '/knowledge', label: 'Knowledge', needs: 'knowledge.view' },
+  { to: '/activity', label: 'Activity', needs: 'content.view' },
   { to: '/staff', label: 'Staff', needs: 'users.manage' },
 ];
 

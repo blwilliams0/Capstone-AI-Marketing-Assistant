@@ -239,3 +239,43 @@ Results:
 - Prompt caching confirmed: call 2 read the 2,138-token brand core from cache.
 - Usage events recorded in `ai_usage_events`; 2 conversations stored under the admin account.
 - Total spend so far: about $0.056.
+
+## 8. M3: approve and post (2026-11-18)
+
+**Automated:** 185 tests passing (shared 7, db 57, api 114, worker 7). Build, strict typecheck, lint and bundle secret scan clean.
+- New database tests (`packages/db/src/content.test.ts`, 25):
+  - digest computed by the database (supplied values ignored); versions immutable
+  - approval copies the digest; only the latest version can be submitted or approved
+  - only active approvers or admins decide; self-approval (requester, creator or any version's author) is admin-only and must be flagged exactly
+  - an edit supersedes waiting or approved requests, with the history recorded
+  - posting only from an approved request; posted posts are locked
+  - changed, retired or expired cited knowledge blocks approval and posting in the database
+  - viewers and former staff can't write; history is append-only; archiving is one-way
+- New API tests (`content.test.ts`, `ai-history.test.ts`):
+  - the full journey, the role rules, self-approval laundering, and the fingerprint mismatch check
+  - sources must be current; edits refresh sources and record removed ones; archive permissions; tenant isolation
+  - recent-post history in the draft prompt (opening line only; cannot escape its tag); document keys removed from output
+
+**Independent review:** a Fable-model security review of the M3 diff found no critical or high-severity issues. All nine of its findings were fixed before applying:
+- knowledge-freshness checks moved into the database
+- removed sources are recorded and shown to the approver
+- "self" now includes every author of a post
+- archiving is limited to the creator or a reviewer, and the database refuses to archive a posted item
+- neutral wording for "superseded" in the history
+- no keys in warnings, and keys are deleted (not replaced) in captions
+- stricter cleaning of history lines
+- item-row locks to order concurrent actions
+- `search_path` pinned on the new functions, and active-member checks for writers and submitters
+
+**Live dev database:** migration 005 applied.
+- 20 tables, all with RLS.
+- 0 public-role grants on tables, 0 executable functions, 0 sequence access (counts only).
+
+**Live Claude drafts** (same request twice: locals, Instagram, "Bring locals back on weeknights", "Wine on the covered patio"):
+
+| # | Input | Output | Cache read | Cache write | Est. cost | Result |
+|---|---|---|---|---|---|---|
+| 1 | 2,615 | 3,005 | 0 | 2,189 | $0.0815 | 3 distinct angles, no document keys, no warnings, 36 s |
+| 2 | 2,851 | 3,039 | 2,189 | 0 | $0.0726 | All three openings new; one option flagged its overlap with draft 1's idea and explained the difference |
+
+Drafts cost more than questions (about 3,000 output tokens), so about 7–8 cents each. Total live spend to date: about $0.21.

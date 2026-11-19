@@ -53,6 +53,8 @@ export interface DraftOption {
   caption: string;
   angle: string;
   whyItFits: string;
+  /** Empty when the idea is fresh; otherwise which recent post it resembles. */
+  repeatNote: string;
   sources: { versionId: string; title: string; kind: string }[];
 }
 

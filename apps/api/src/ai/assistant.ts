@@ -13,6 +13,7 @@ import { buildContext } from './context.js';
 import { ANSWER_SYSTEM, DRAFT_SYSTEM } from './prompts.js';
 import type { AiDocument, AiProvider } from './provider.js';
 import { monthToDateCostUsd, recordUsage, type AiTask } from './usage.js';
+import { recentMarketing, saveDraftIdeas, scrubDocumentKeys } from './history.js';
 
 export interface AiDeps {
   db: Db;
@@ -108,7 +109,7 @@ export async function ask(
     if (s.quotes.length < 2 && c.citedText.trim()) s.quotes.push(c.citedText.trim().slice(0, 300));
     sources.set(d.versionId, s);
   }
-  const answer = res.refused ? "The assistant can't help with that request. Try rephrasing it as a marketing question." : res.text || '(No answer was returned.)';
+  const answer = res.refused ? "The assistant can't help with that request. Try rephrasing it as a marketing question." : scrubDocumentKeys(res.text, docs) || '(No answer was returned.)';
 
   const conversationId = await db.transaction(async (tx) => {
     let id = input.conversationId;
@@ -152,6 +153,8 @@ export const draftOutputSchema = z.object({
       angle: z.string(),
       why_it_fits: z.string(),
       uses_documents: z.array(z.string()),
+      /** Empty when the idea is fresh; otherwise names the recent post it resembles. */
+      repeat_check: z.string(),
     }),
   ),
   what_to_confirm: z.array(z.string()),
@@ -174,14 +177,15 @@ export function checkDraft(out: DraftOutput, docs: AiDocument[]): Pick<DraftResp
   const warnings: string[] = [];
   const options = out.options.slice(0, 3).map((o, i) => {
     const unknown = o.uses_documents.filter((k) => !byKey.has(k));
-    if (unknown.length) warnings.push(`Option ${i + 1} referred to sources that were not provided (${unknown.join(', ')}); those references were removed.`);
+    if (unknown.length) warnings.push(`Option ${i + 1} claimed support from ${unknown.length === 1 ? 'a source' : 'sources'} the assistant was not given; that claim was removed.`);
     if (o.caption.length > CAPTION_LIMIT) warnings.push(`Option ${i + 1} is longer than ${CAPTION_LIMIT} characters and will need shortening.`);
     const seen = new Set<string>();
     const sources = o.uses_documents
       .map((k) => byKey.get(k))
       .filter((d): d is AiDocument => !!d && !seen.has(d.versionId) && !!seen.add(d.versionId))
       .map((d) => ({ versionId: d.versionId, title: d.title, kind: d.kind }));
-    return { caption: o.caption.trim(), angle: o.angle.trim(), whyItFits: o.why_it_fits.trim(), sources };
+    const scrub = (s: string) => scrubDocumentKeys(s.trim(), docs);
+    return { caption: scrubDocumentKeys(o.caption.trim(), docs, { remove: true }), angle: scrub(o.angle), whyItFits: scrub(o.why_it_fits), repeatNote: scrub(o.repeat_check), sources };
   });
   if (options.length === 0) warnings.push('The assistant returned no options. Try again with a more specific topic.');
   return { options, warnings };
@@ -195,6 +199,7 @@ function mockDraft(docs: AiDocument[], req: DraftRequest): DraftOutput {
       angle: n === 1 ? 'Seasonal discovery' : 'Personal hospitality',
       why_it_fits: 'Placeholder text from the mock provider.',
       uses_documents: key ? [key] : [],
+      repeat_check: '',
     })),
     what_to_confirm: ['Confirm the dish and date with the kitchen.'],
     risks: [],
@@ -207,14 +212,19 @@ function mockDraft(docs: AiDocument[], req: DraftRequest): DraftOutput {
 export async function draft(deps: AiDeps, actor: AuthContext, req: DraftRequest): Promise<DraftResponse> {
   const ai = await guard(deps, actor, 'draft');
   const docs = await buildContext(deps.db, actor.restaurantId, `${req.topic} ${req.goal}`);
+  const history = await recentMarketing(deps.db, actor.restaurantId);
   const prompt = [
     `Audience: ${AUDIENCE_LABELS[req.audience]}`,
     `Channel: ${CHANNEL_LABELS[req.channel]}`,
     `Goal: ${req.goal}`,
     `What the post is about: ${req.topic}`,
     '',
+    history,
+    history ? '' : 'There is no recent marketing history yet.',
     'Write the draft options now.',
-  ].join('\n');
+  ]
+    .filter((line, i, all) => line !== '' || all[i - 1] !== '')
+    .join('\n');
 
   const res = await callProvider(deps, actor, 'draft', ai, () =>
     ai.structured({ system: DRAFT_SYSTEM, documents: docs, prompt, schema: draftOutputSchema, effort: 'medium', mock: () => mockDraft(docs, req) }),
@@ -247,14 +257,23 @@ export async function draft(deps: AiDeps, actor: AuthContext, req: DraftRequest)
   if (!docs.some((d) => d.kind === 'brand_rule')) {
     warnings.unshift('No approved brand rules yet, so these drafts are not grounded in management-approved guidance. Approve brand rules first.');
   }
+  await saveDraftIdeas(deps.db, {
+    restaurantId: actor.restaurantId,
+    userId: actor.userId,
+    channel: req.channel,
+    audience: req.audience,
+    goal: req.goal,
+    options: checked.options,
+  });
+  const scrub = (xs: string[]) => xs.map((x) => scrubDocumentKeys(x, docs));
   return {
     ...base,
     options: checked.options,
-    whatToConfirm: res.data.what_to_confirm,
-    risks: res.data.risks,
-    suggestedTiming: res.data.suggested_timing,
-    howToMeasure: res.data.how_to_measure,
-    photoTips: res.data.photo_tips,
+    whatToConfirm: scrub(res.data.what_to_confirm),
+    risks: scrub(res.data.risks),
+    suggestedTiming: scrubDocumentKeys(res.data.suggested_timing, docs),
+    howToMeasure: scrub(res.data.how_to_measure),
+    photoTips: scrub(res.data.photo_tips),
     warnings,
   };
 }
