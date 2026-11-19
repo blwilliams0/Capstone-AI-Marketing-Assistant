@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { ROLE_DESCRIPTIONS } from '@the-pocket/shared';
+import { ROLE_DESCRIPTIONS, type NotificationsResponse, type PostSummary } from '@the-pocket/shared';
 import { useAuth } from '../auth';
 import { Card } from '../ui';
 
@@ -14,7 +14,7 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   'content.draft': 'Draft marketing content',
   'approval.request': 'Submit drafts for review',
   'data.import': 'Import sales and reservation reports',
-  'post.approve': 'Approve other people\'s marketing posts',
+  'post.approve': "Approve other people's marketing posts",
   'post.record': 'Record approved posts as posted',
   'brand.approve': 'Approve brand rules and facts',
   'channel.connect': 'Connect social media accounts',
@@ -25,18 +25,76 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   'audit.view': 'See the activity history',
 };
 
+interface Task {
+  to: string;
+  title: string;
+  text: string;
+  needs: string;
+  /** A count shown on the tile, when something is waiting. */
+  badge?: number;
+}
+
+function TaskTile({ t, n }: { t: Task; n: number }) {
+  return (
+    <Link to={t.to} className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
+      <p className="flex items-center gap-2 font-medium">
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-xs text-white">{n}</span>
+        {t.title}
+        {!!t.badge && <span className="rounded-full bg-amber-100 px-2 text-xs text-amber-800">{t.badge} waiting</span>}
+      </p>
+      <p className="mt-1 text-sm text-stone-600">{t.text}</p>
+    </Link>
+  );
+}
+
 export function Home() {
   const { me, apiFetch } = useAuth();
   const [health, setHealth] = useState<'checking' | 'ok' | 'down'>('checking');
+  const [posts, setPosts] = useState<PostSummary[]>([]);
+  const [reminders, setReminders] = useState<NotificationsResponse | null>(null);
 
   useEffect(() => {
     apiFetch('/health')
       .then((r) => setHealth(r.ok ? 'ok' : 'down'))
       .catch(() => setHealth('down'));
+    apiFetch('/api/notifications')
+      .then(async (r) => r.ok && setReminders((await r.json()) as NotificationsResponse))
+      .catch(() => {});
   }, [apiFetch]);
+
+  useEffect(() => {
+    if (!me?.capabilities.includes('content.view')) return;
+    apiFetch('/api/posts')
+      .then(async (r) => r.ok && setPosts(((await r.json()) as { posts: PostSummary[] }).posts))
+      .catch(() => {});
+  }, [apiFetch, me]);
 
   if (!me) return null;
   const can = (c: string) => me.capabilities.includes(c);
+  const waiting = posts.filter((p) => p.status === 'in_review').length;
+  const ready = posts.filter((p) => p.status === 'approved').length;
+  const needsWork = posts.filter((p) => (p.status === 'changes_requested' || p.status === 'rejected') && p.createdBy.id === me.userId).length;
+
+  const tasks: Task[] = [
+    { to: '/assistant', title: 'Ask the marketing assistant', text: "Practical answers grounded in The Pocket's approved brand and strategy, with sources.", needs: 'assistant.use' },
+    { to: '/create', title: 'Create a post', text: 'Choose locals or visitors, a channel and a goal; get on-brand options and a photo plan.', needs: 'content.draft' },
+    {
+      to: '/posts',
+      title: can('post.approve') ? 'Review and approve' : 'Your posts',
+      text: can('post.approve') ? 'Check the exact text, then approve, ask for changes or decline.' : 'Drafts, posts waiting for approval, and feedback from reviewers.',
+      needs: 'content.view',
+      badge: can('post.approve') ? waiting : needsWork,
+    },
+    { to: '/ready', title: 'Ready to post', text: 'Copy the approved text, post it yourself, and record it.', needs: 'post.record', badge: ready },
+    {
+      to: can('interview.conduct') ? '/interviews' : '/knowledge',
+      title: 'Keep the brand right',
+      text: can('brand.approve') ? 'Approve brand rules and facts, check what is expiring, run brand interviews.' : 'Approved brand rules and facts, and brand interviews with management.',
+      needs: 'knowledge.view',
+    },
+  ];
+  const mine = tasks.filter((t) => can(t.needs));
+  const unread = (reminders?.notifications ?? []).filter((n) => !n.read).slice(0, 4);
 
   return (
     <div className="space-y-6">
@@ -45,53 +103,36 @@ export function Home() {
         <p className="text-stone-600">{ROLE_DESCRIPTIONS[me.role]}</p>
       </div>
 
+      {unread.length > 0 && (
+        <Card title="Needs you today">
+          <ul className="space-y-2">
+            {unread.map((n) => (
+              <li key={n.id}>
+                <Link to={n.link} className="text-sm font-medium underline">
+                  {n.title}
+                </Link>
+                <p className="text-xs text-stone-600">{n.body}</p>
+              </li>
+            ))}
+          </ul>
+          {(reminders?.unread ?? 0) > unread.length && (
+            <Link to="/reminders" className="mt-3 inline-block text-sm underline">
+              See all {reminders!.unread} reminders
+            </Link>
+          )}
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
-        {can('assistant.use') && (
-          <Link to="/assistant" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-            <p className="font-medium">Ask the marketing assistant</p>
-            <p className="text-sm text-stone-600">Practical answers grounded in The Pocket's approved brand and strategy, with sources.</p>
-          </Link>
-        )}
-        {can('content.draft') && (
-          <Link to="/create" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-            <p className="font-medium">Create a post</p>
-            <p className="text-sm text-stone-600">Choose locals or visitors, a channel and a goal; get on-brand draft options.</p>
-          </Link>
-        )}
-        {can('knowledge.view') && (
-          <Link to="/knowledge" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-            <p className="font-medium">Manage The Pocket's knowledge</p>
-            <p className="text-sm text-stone-600">Approved brand rules, verified facts, the marketing strategy and research.</p>
-          </Link>
-        )}
-        {can('interview.conduct') && (
-          <Link to="/interviews" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-            <p className="font-medium">Brand interview</p>
-            <p className="text-sm text-stone-600">Capture management&apos;s view of the brand in their own words, then turn it into proposed brand rules.</p>
-          </Link>
-        )}
-        {can('users.manage') && (
-          <Link to="/staff" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-            <p className="font-medium">Staff access</p>
-            <p className="text-sm text-stone-600">Invite people, see who has access, remove access.</p>
-          </Link>
-        )}
+        {mine.map((t, i) => (
+          <TaskTile key={t.to + t.title} t={t} n={i + 1} />
+        ))}
         {can('content.view') && (
-          <Link to="/posts" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-            <p className="font-medium">{can('post.approve') ? 'Review and approve posts' : 'Posts'}</p>
-            <p className="text-sm text-stone-600">Drafts, posts waiting for approval, and everything already posted.</p>
+          <Link to="/photo-guide" className="block rounded-lg border border-dashed border-stone-300 p-5 hover:border-stone-500">
+            <p className="font-medium">Photo guide</p>
+            <p className="text-sm text-stone-600">How to take restaurant photos with a phone that look like The Pocket.</p>
           </Link>
         )}
-        {can('post.record') && (
-          <Link to="/ready" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-            <p className="font-medium">Ready to post</p>
-            <p className="text-sm text-stone-600">Copy the approved text, post it yourself, and record it.</p>
-          </Link>
-        )}
-        <div className="rounded-lg border border-dashed border-stone-300 p-5 text-stone-500">
-          <p className="font-medium">Plan and measure</p>
-          <p className="text-sm">Coming next.</p>
-        </div>
       </div>
 
       <Card title="What you can do">
