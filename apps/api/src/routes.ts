@@ -9,6 +9,7 @@ import { addKnowledgeRoutes } from './knowledge/routes.js';
 import { addAssistantRoutes } from './ai/routes.js';
 import { addContentRoutes } from './content/routes.js';
 import { addInterviewRoutes } from './interview/routes.js';
+import { addCalendarRoutes } from './calendar/routes.js';
 import type { AiProvider } from './ai/provider.js';
 
 export interface RouteDeps {
@@ -193,6 +194,7 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
 
   addKnowledgeRoutes(r, db);
   addContentRoutes(r, db);
+  addCalendarRoutes(r, db);
   addInterviewRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
   addAssistantRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
 

@@ -8,12 +8,20 @@ import { StatusChip } from './Posts';
 const fmt = (iso: string) => new Date(iso).toLocaleString();
 export const shortPrint = (digest: string) => digest.slice(0, 12);
 
+/** ISO time to the value a datetime-local input expects, in the browser's time zone. */
+export function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function VersionBody({ v }: { v: PostVersionView }) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-stone-500">
         {CHANNEL_LABELS[v.channel]} · {AUDIENCE_LABELS[v.audience]}
         {v.angle && <> · {v.angle}</>}
+        {v.scheduledFor && <> · scheduled for {new Date(v.scheduledFor).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</>}
       </p>
       <p className="whitespace-pre-wrap rounded bg-stone-50 p-3 text-sm">{v.caption}</p>
       {v.photoPlan && (
@@ -54,6 +62,7 @@ export function PostDetail() {
   const [editing, setEditing] = useState(false);
   const [caption, setCaption] = useState('');
   const [photoPlan, setPhotoPlan] = useState('');
+  const [scheduledFor, setScheduledFor] = useState('');
   const [note, setNote] = useState('');
   const [confirmSelf, setConfirmSelf] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -128,13 +137,18 @@ export function PostDetail() {
               Photo plan
               <textarea className={`${inputClass} min-h-20`} value={photoPlan} onChange={(e) => setPhotoPlan(e.target.value)} maxLength={4000} />
             </label>
-            {open && <Alert kind="info">Saving creates a new version. The current {open.status === 'approved' ? 'approval' : 'approval request'} will no longer apply.</Alert>}
+            <label className="block text-sm font-medium">
+              When should it go out? (optional; your local time)
+              <input type="datetime-local" className={inputClass} value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+            </label>
+            {open &&<Alert kind="info">Saving creates a new version. The current {open.status === 'approved' ? 'approval' : 'approval request'} will no longer apply.</Alert>}
             <div className="flex gap-2">
               <button
                 className={buttonClass}
                 disabled={busy || !caption.trim()}
                 onClick={async () => {
-                  if (await act(`/api/posts/${post.id}/versions`, { caption, photoPlan }, 'Saved as a new version.')) setEditing(false);
+                  const body = { caption, photoPlan, scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : null };
+                  if (await act(`/api/posts/${post.id}/versions`, body, 'Saved as a new version.')) setEditing(false);
                 }}
               >
                 Save new version
@@ -159,6 +173,7 @@ export function PostDetail() {
                     onClick={() => {
                       setCaption(latest.caption);
                       setPhotoPlan(latest.photoPlan);
+                      setScheduledFor(latest.scheduledFor ? toLocalInput(latest.scheduledFor) : '');
                       setEditing(true);
                     }}
                   >

@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import type { Capability } from '@the-pocket/shared';
 import { useAuth } from './auth';
 
@@ -17,12 +18,38 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/ready', label: 'Ready to post', needs: 'post.record' },
   { to: '/knowledge', label: 'Knowledge', needs: 'knowledge.view' },
   { to: '/interviews', label: 'Interviews', needs: 'interview.conduct' },
+  { to: '/calendar', label: 'Calendar', needs: 'content.view' },
   { to: '/activity', label: 'Activity', needs: 'content.view' },
   { to: '/staff', label: 'Staff', needs: 'users.manage' },
+  { to: '/reminders', label: 'Reminders' },
 ];
+
+/** Unread reminders, refreshed on each page change and every two minutes. */
+function useUnreadReminders(): number {
+  const { me, apiFetch } = useAuth();
+  const { pathname } = useLocation();
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!me) return;
+    let alive = true;
+    const check = () =>
+      apiFetch('/api/notifications')
+        .then(async (r) => (r.ok ? ((await r.json()) as { unread: number }).unread : 0))
+        .then((n) => alive && setUnread(n))
+        .catch(() => {});
+    void check();
+    const timer = setInterval(check, 2 * 60 * 1000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [me, apiFetch, pathname]);
+  return unread;
+}
 
 export function Layout() {
   const { me, signOut } = useAuth();
+  const unread = useUnreadReminders();
   if (!me) return null;
   const items = NAV_ITEMS.filter((i) => !i.needs || me.capabilities.includes(i.needs));
   return (
@@ -39,6 +66,11 @@ export function Layout() {
                 className={({ isActive }) => (isActive ? 'font-medium text-stone-900 underline' : 'text-stone-600 hover:text-stone-900')}
               >
                 {i.label}
+                {i.to === "/reminders" && unread > 0 && (
+                  <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs font-medium text-white" aria-label={`${unread} unread`}>
+                    {unread}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>

@@ -1,14 +1,41 @@
-import { claimNextJob, completeJob, failJob, type Db, type Job } from '@the-pocket/db';
+import { claimNextJob, completeJob, enqueueJob, failJob, runReminderScan, type Db, type Job } from '@the-pocket/db';
 
 export type JobHandler = (job: Job) => Promise<void>;
 
 /**
- * Stage 1 registers only a harmless no-op. There is deliberately NO publishing handler: real
- * handlers arrive in later stages and must re-check approvals and permissions before acting.
+ * Harmless built-in handlers. There is deliberately NO publishing handler: posting is done by a
+ * person (assisted manual posting). Any future publishing handler must re-check the approval.
  */
 export const defaultHandlers: Record<string, JobHandler> = {
   'system.noop': async () => {},
 };
+
+/** All handlers the worker runs. Reminders only create in-app notifications; they never post. */
+export function buildHandlers(db: Db): Record<string, JobHandler> {
+  return {
+    ...defaultHandlers,
+    'reminders.scan': async (job) => {
+      await runReminderScan(db, job.restaurant_id);
+    },
+  };
+}
+
+export const REMINDER_INTERVAL_MS = 15 * 60 * 1000;
+
+/**
+ * Queues one reminder scan per restaurant per 15-minute window. Idempotent: calling it many times
+ * in the same window (or from several workers) queues each scan once.
+ */
+export async function scheduleReminderScans(db: Db, now: Date = new Date()): Promise<number> {
+  const bucket = Math.floor(now.getTime() / REMINDER_INTERVAL_MS);
+  const restaurants = await db.query<{ id: string }>('SELECT id FROM restaurants');
+  let created = 0;
+  for (const r of restaurants) {
+    const out = await enqueueJob(db, { restaurantId: r.id, type: 'reminders.scan', idempotencyKey: `reminders.scan:${bucket}`, maxAttempts: 2 });
+    if (out.created) created++;
+  }
+  return created;
+}
 
 export type RunResult = 'idle' | 'succeeded' | 'retry' | 'failed' | 'lost';
 

@@ -3,6 +3,8 @@ import { useAuth } from './auth';
 import { Layout } from './Layout';
 import { Activity } from './pages/Activity';
 import { Assistant } from './pages/Assistant';
+import { Calendar } from './pages/Calendar';
+import { Reminders } from './pages/Reminders';
 import { Interview } from './pages/Interview';
 import { Interviews } from './pages/Interviews';
 import { PostDetail } from './pages/PostDetail';
@@ -53,6 +55,8 @@ export default function App() {
             <Route path="ready" element={<ReadyToPost />} />
             <Route path="activity" element={<Activity />} />
             <Route path="knowledge" element={<Knowledge />} />
+            <Route path="calendar" element={<Calendar />} />
+            <Route path="reminders" element={<Reminders />} />
             <Route path="interviews" element={<Interviews />} />
             <Route path="interviews/:sessionId" element={<Interview />} />
             <Route path="staff" element={<Staff />} />

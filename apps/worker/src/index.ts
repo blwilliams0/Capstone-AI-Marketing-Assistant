@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createPgDb } from '@the-pocket/db';
-import { defaultHandlers, runLoop } from './worker.js';
+import { buildHandlers, REMINDER_INTERVAL_MS, runLoop, scheduleReminderScans } from './worker.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -27,6 +27,10 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 log('worker started');
-await runLoop(db, workerId, defaultHandlers, { pollIntervalMs, signal: controller.signal, log });
+const schedule = () => scheduleReminderScans(db).catch((err: unknown) => log(`could not schedule reminders: ${err instanceof Error ? err.message : String(err)}`));
+await schedule();
+const timer = setInterval(() => void schedule(), Math.min(REMINDER_INTERVAL_MS, 5 * 60 * 1000));
+await runLoop(db, workerId, buildHandlers(db), { pollIntervalMs, signal: controller.signal, log });
+clearInterval(timer);
 await db.close();
 log('worker stopped');

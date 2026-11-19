@@ -300,3 +300,28 @@ Drafts cost more than questions (about 3,000 output tokens), so about 7–8 cent
 **Live dev database:** migration 006 applied. 24 tables, all with RLS. 0 public-role grants on tables, 0 executable functions, 0 sequence access.
 
 **Live AI:** not run. A live test would create a permanent interview record in the real database, so the first real use is the owner's interview with management. Expected costs: a follow-up suggestion is about 1 cent (low effort); drafting rules from a full interview is roughly 15–30 cents (high effort, long input). Not yet measured.
+
+## 10. M4b: calendar and reminders (2026-11-18)
+
+**Automated:** 205 tests passing (shared 7, db 62, api 127, worker 9).
+
+`reminders.test.ts` (db) checks:
+- the right reminders go to the right people:
+  - post due → staff who can post
+  - post overdue → staff who can post
+  - not submitted → whoever started the post
+  - waiting for approval → reviewers other than the requester
+  - fact expiring or expired → administrators
+  - viewers get none
+- Carmel local time in the wording
+- running the scan again creates nothing
+- only "read" can change, and only once; nothing can be deleted
+- links must be in-app paths
+
+`worker.test.ts`: one scan per restaurant per 15 minutes however often it is scheduled; the handler table is only `reminders.scan` and `system.noop` (still no publishing handler).
+
+`calendar.test.ts`: scheduled posts in range, posts without a date, fact expiry dates, range validation, reminders per person, marking read (only your own).
+
+**Live dev database:** migration 007 applied. 25 tables, all with RLS, and 0 public access. One live reminder scan ran cleanly and created 0 reminders (nothing scheduled yet).
+
+**No AI calls and no paid services:** reminders are in-app only.
