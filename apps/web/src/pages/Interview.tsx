@@ -8,6 +8,7 @@ import {
   type InterviewProposal,
   type InterviewQuestion,
   type InterviewSessionDetail,
+  type TranscriptFillResult,
 } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, Card, buttonClass, inputClass, secondaryButtonClass } from '../ui';
@@ -98,6 +99,9 @@ function QuestionCard({ q, detail, reload, api }: { q: InterviewQuestion; detail
         {q.question}
       </p>
       {q.followUp && <p className="text-xs text-stone-500">If the answer is short: {q.followUp}</p>}
+      {main?.source === 'transcript' && (
+        <p className="text-xs text-amber-800">Filled from the transcript (their exact words). Check it is the manager speaking, then edit if needed.</p>
+      )}
       <AnswerBox sessionId={detail.id} questionId={q.id} saved={main?.answer ?? ''} locked={locked} onSaved={reload} />
       {followUps.map((f) => (
         <div key={f.questionId} className="ml-4 border-l-2 border-stone-200 pl-3">
@@ -211,6 +215,155 @@ function ProposalCard({ p, index, extraction, sessionId, canSave, onSaved }: { p
   );
 }
 
+/** Rename the interview or mark it as practice. */
+function DetailsEditor({ detail, onSaved }: { detail: InterviewSessionDetail; onSaved: () => Promise<void> }) {
+  const { apiFetch } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState(detail.label ?? '');
+  const [isPractice, setIsPractice] = useState(detail.isPractice);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return (
+      <button className="text-sm underline" onClick={() => setOpen(true)}>
+        Rename this interview or mark it as practice
+      </button>
+    );
+  }
+  return (
+    <Card title="Interview name">
+      <div className="space-y-3">
+        <input className={inputClass} maxLength={120} placeholder="e.g. First brand interview" value={label} onChange={(e) => setLabel(e.target.value)} />
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={isPractice} onChange={(e) => setIsPractice(e.target.checked)} />
+          Practice interview (kept, but never used to compare managers&apos; real answers)
+        </label>
+        {error && <Alert kind="error">{error}</Alert>}
+        <div className="flex gap-2">
+          <button
+            className={buttonClass}
+            onClick={async () => {
+              const res = await apiFetch(`/api/interviews/${detail.id}/details`, { method: 'POST', body: { label: label.trim() || null, isPractice } });
+              if (!res.ok) return setError(await readError(res));
+              setOpen(false);
+              await onSaved();
+            }}
+          >
+            Save
+          </button>
+          <button className={secondaryButtonClass} onClick={() => setOpen(false)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** Removes caption-file timing lines (WEBVTT, cue numbers, "00:01 --> 00:04") so only speech is left. */
+function cleanTranscript(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !/^WEBVTT/.test(line) && !/^\d+$/.test(line.trim()) && !/-->/.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Upload or paste a transcript; the AI places the manager's own words under the guide's questions. */
+function TranscriptCard({ detail, onFilled }: { detail: InterviewSessionDetail; onFilled: () => Promise<void> }) {
+  const { apiFetch } = useAuth();
+  const [text, setText] = useState('');
+  const [fileName, setFileName] = useState<string | undefined>();
+  const [replaceTyped, setReplaceTyped] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<TranscriptFillResult | null>(null);
+  if (detail.status === 'completed') return null;
+
+  async function pickFile(file: File) {
+    setError(null);
+    if (/\.docx?$/i.test(file.name)) return setError('Word files are not supported yet. In Word, choose File → Save As → Plain Text (.txt), or copy and paste the text below.');
+    if (file.size > 2_000_000) return setError('That file is too large for a transcript.');
+    setText(cleanTranscript(await file.text()));
+    setFileName(file.name);
+  }
+
+  async function fill() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    const up = await apiFetch(`/api/interviews/${detail.id}/transcripts`, { method: 'POST', body: { fileName, text } });
+    if (!up.ok) {
+      setBusy(false);
+      return setError(await readError(up));
+    }
+    const { transcriptId } = (await up.json()) as { transcriptId: string };
+    const res = await apiFetch(`/api/interviews/${detail.id}/transcripts/fill`, { method: 'POST', body: { transcriptId, replaceTyped } });
+    setBusy(false);
+    if (!res.ok) return setError(await readError(res));
+    setResult((await res.json()) as TranscriptFillResult);
+    setText('');
+    setFileName(undefined);
+    await onFilled();
+  }
+
+  return (
+    <Card title="Have a transcript of the interview?">
+      <div className="space-y-3">
+        {!detail.aiConsent ? (
+          <Alert kind="info">The interviewee did not agree to AI use, so a transcript cannot be read by the AI. Type the answers in below instead.</Alert>
+        ) : (
+          <>
+            <p className="text-sm text-stone-600">
+              Upload or paste a transcript (for example from Zoom, Teams, Otter or a phone recording app). The assistant puts the manager&apos;s own words under each question. It can
+              only copy words that are really in the transcript; it never writes answers. Check each answer afterwards.
+            </p>
+            <input type="file" accept=".txt,.md,.vtt,.srt,text/plain" onChange={(e) => e.target.files?.[0] && void pickFile(e.target.files[0])} className="text-sm" />
+            <textarea
+              className={`${inputClass} min-h-32 text-sm`}
+              placeholder="…or paste the transcript here"
+              value={text}
+              maxLength={150000}
+              onChange={(e) => {
+                setText(e.target.value);
+                setFileName(undefined);
+              }}
+            />
+            <p className="text-xs text-stone-500">{text.length.toLocaleString()} of 150,000 characters · about 30–60 cents to process a one-hour interview</p>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={replaceTyped} onChange={(e) => setReplaceTyped(e.target.checked)} />
+              Also replace answers someone already typed (otherwise typed answers are kept)
+            </label>
+            {error && <Alert kind="error">{error}</Alert>}
+            <button className={buttonClass} disabled={busy || text.trim().length < 20} onClick={() => void fill()}>
+              {busy ? 'Reading the transcript… (up to a few minutes)' : 'Fill in the answers from this transcript'}
+            </button>
+          </>
+        )}
+        {result && (
+          <Alert kind="success">
+            Filled {result.filled.length} question{result.filled.length === 1 ? '' : 's'} from the transcript
+            {result.keptTyped.length > 0 && `; kept ${result.keptTyped.length} typed answer${result.keptTyped.length === 1 ? '' : 's'}`}
+            {result.notCovered.length > 0 && `. Not covered: ${result.notCovered.join(', ')}`}.
+          </Alert>
+        )}
+        {result?.warnings.map((w, i) => (
+          <Alert key={i} kind="info">
+            {w}
+          </Alert>
+        ))}
+        {detail.transcripts.length > 0 && (
+          <p className="text-xs text-stone-500">
+            Transcripts on file:{' '}
+            {detail.transcripts.map((t) => `${t.fileName ?? 'pasted text'} (${t.characters.toLocaleString()} characters, ${new Date(t.uploadedAt).toLocaleDateString()})`).join('; ')}
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function Interview() {
   const { sessionId } = useParams();
   const { me, apiFetch } = useAuth();
@@ -253,7 +406,9 @@ export function Interview() {
           ← All interviews
         </Link>
         <h1 className="mt-1 text-2xl font-semibold">
-          Interview with {detail.intervieweeName}
+          {detail.label ? `${detail.label}: ` : 'Interview with '}
+          {detail.intervieweeName}
+          {detail.isPractice && <span className="ml-2 rounded-full bg-stone-100 px-2 align-middle text-xs font-normal text-stone-600">Practice</span>}
           {detail.intervieweeRole && <span className="text-stone-500"> ({detail.intervieweeRole})</span>}
         </h1>
         <p className="text-sm text-stone-600">
@@ -263,6 +418,9 @@ export function Interview() {
         <p className="mt-1 text-xs text-stone-500">Don&apos;t lead: ask the question first, and use the follow-ups only if the answer is short. Sections A to E matter most.</p>
       </div>
       {error && <Alert kind="error">{error}</Alert>}
+
+      <DetailsEditor detail={detail} onSaved={load} />
+      <TranscriptCard detail={detail} onFilled={load} />
 
       {INTERVIEW_SECTIONS.map((s) => (
         <Card key={s.id} title={`${s.id}. ${s.title}`}>

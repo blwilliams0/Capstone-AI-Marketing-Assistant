@@ -391,3 +391,32 @@ Two Fable-model reviews (photo upload security; whole-project bug hunt plus plan
 **Results:** 216 tests passing (shared 7, db 63, api 137, worker 9). Live: migration 009 applied; 25 tables with RLS; 0 public access.
 
 **Deferred (recorded in STATUS):** `trust proxy`, and moving rate limits into the database (deployment, M6); long AI calls as background jobs if the host cuts requests short; admin view of staff chats needs a notice and consent design first; KPI "cost unknown" for failed AI calls (M5); paging instead of the 200 and 300 caps (M5); one shared restaurant time zone; Supabase free-tier pausing and backups (Dec 1 gate); growth of job and notification history; a migration lock for multiple instances; web UI tests (M6 Playwright).
+
+## 14. Interview transcripts, names and practice flag (2026-11-21)
+
+**Owner request:** upload a transcript and have the AI fill in the interview answers; name interviews.
+
+- Migration 010:
+  - an interview name (`label`) and an `is_practice` flag; both can be changed, other details stay fixed
+  - append-only `interview_transcripts` (up to 150,000 characters; the database computes a SHA-256)
+  - answers record `source` (`typed` or `transcript`) and link to the transcript they came from
+- Filling from a transcript:
+  - needs AI consent
+  - the AI may only copy the interviewee's words: every excerpt must appear word for word in the transcript or it is dropped
+  - typed answers are kept unless the person ticks "replace"
+  - the result lists filled, kept and not-covered questions, and how the AI identified the speaker
+- Practice interviews are excluded from the comparison between managers by the flag (no longer by name).
+- The upload route accepts up to 700 KB; every other request stays at 100 KB.
+
+**Automated:** 220 tests passing (shared 7, db 63, api 141, worker 9). New interview tests cover:
+- naming and marking practice; practice answers never reach another interview's prompt
+- verbatim-only filling, including an invented line being dropped
+- typed answers kept by default and replaced only when asked
+- a 120,000-character upload; no AI call without consent
+- transcripts are append-only and cannot be used by another interview
+
+`interview.test.ts` hit the Windows PGlite crash once and then passed twice in a row.
+
+**Live:** migration 010 applied; 26 tables with RLS; 0 public access. `npm audit --omit=dev`: 0 vulnerabilities.
+
+**Not yet measured live:** cost of filling from a transcript. Estimate about 30–60 cents for a one-hour interview (about 25,000 input tokens plus the excerpts).

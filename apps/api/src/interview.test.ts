@@ -9,6 +9,7 @@ type U = Awaited<ReturnType<Harness['addUser']>>;
 let admin: U, contributor: U, viewer: U;
 const prompts: { system: string; prompt: string }[] = [];
 let nextExtraction: unknown = null;
+let nextTranscript: unknown = null;
 
 // Records prompts; returns a canned extraction when one is queued, otherwise the mock's output.
 const base = createMockAiProvider();
@@ -17,6 +18,11 @@ const spy: AiProvider = {
   answer: base.answer,
   async structured<T>(req: StructuredRequest<T>) {
     prompts.push({ system: req.system, prompt: req.prompt });
+    if (nextTranscript && /transcript of the conversation/.test(req.system)) {
+      const data = req.schema.parse(nextTranscript);
+      nextTranscript = null;
+      return { data, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }, model: 'mock', refused: false };
+    }
     if (nextExtraction && /PROPOSED brand rules/.test(req.system)) {
       const data = req.schema.parse(nextExtraction);
       nextExtraction = null;
@@ -237,6 +243,82 @@ describe('brand interview: drafting rules', () => {
     const other = await h.addUser('admin', { restaurantId: await h.addRestaurant('Other') });
     expect((await as(other).get(`/api/interviews/${id}`)).status).toBe(404);
     expect((await as(other).post(`/api/interviews/${id}/answers`, { questionId: 'A1', answer: 'x' })).status).toBe(404);
+  });
+});
+
+describe('brand interview: names, practice and transcripts', () => {
+  const TRANSCRIPT = [
+    'Interviewer: How would you describe The Pocket to someone who has never been?',
+    'Mike: Honestly, it is a little hidden gem. Intimate, about forty seats, and the patio is the heart of it.',
+    'Interviewer: Should it be seen as fun?',
+    'Mike: Warm, yes. Fun in a grown-up way, never loud or silly.',
+  ].join('\n');
+
+  it('an interview can be named and marked as practice, and practice interviews are left out of comparisons', async () => {
+    const id = await start('Blake');
+    expect((await as(contributor).post(`/api/interviews/${id}/details`, { label: 'Dry run', isPractice: true })).status).toBe(200);
+    const d = (await as(contributor).get(`/api/interviews/${id}`)).body;
+    expect(d).toMatchObject({ label: 'Dry run', isPractice: true });
+    await answer(id, 'B2', 'PRACTICE-ONLY-MARKER fun is great.');
+
+    const real = await start('Elliot P');
+    await answer(real, 'B2', 'Warm and relaxed, not trendy.');
+    nextExtraction = { proposals: [], open_questions: [] };
+    await as(contributor).post(`/api/interviews/${real}/extract`);
+    expect(prompts.at(-1)!.prompt).not.toMatch(/PRACTICE-ONLY-MARKER/);
+  });
+
+  it('fills answers from a transcript with only words found in it, keeping typed answers by default', async () => {
+    const id = await start('Mike T', true);
+    await answer(id, 'B2', 'Typed by the interviewer during the call.');
+    const up = await as(contributor).post(`/api/interviews/${id}/transcripts`, { fileName: 'mike.txt', text: TRANSCRIPT });
+    expect(up.status, JSON.stringify(up.body)).toBe(201);
+
+    nextTranscript = {
+      answers: [
+        { question_id: 'A1', excerpts: ['it is a little hidden gem', 'Intimate, about forty seats, and the patio is the heart of it.', 'We are the best restaurant in California'] },
+        { question_id: 'B2', excerpts: ['Fun in a grown-up way, never loud or silly.'] },
+        { question_id: 'Z9', excerpts: ['ignored'] },
+      ],
+      speaker_note: 'Lines starting with "Mike:".',
+    };
+    const res = await as(contributor).post(`/api/interviews/${id}/transcripts/fill`, { transcriptId: up.body.transcriptId });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.filled).toEqual(['A1']);
+    expect(res.body.keptTyped).toEqual(['B2']);
+    expect(res.body.droppedExcerpts).toBe(1); // the invented line
+    expect(res.body.notCovered).toContain('C1');
+
+    const d = (await as(contributor).get(`/api/interviews/${id}`)).body;
+    const a1 = d.answers.find((a: { questionId: string }) => a.questionId === 'A1');
+    expect(a1.source).toBe('transcript');
+    expect(a1.answer).toBe('it is a little hidden gem\n\nIntimate, about forty seats, and the patio is the heart of it.');
+    expect(d.answers.find((a: { questionId: string }) => a.questionId === 'B2').answer).toBe('Typed by the interviewer during the call.');
+    expect(d.transcripts).toHaveLength(1);
+
+    // Asking to replace typed answers does replace them.
+    nextTranscript = { answers: [{ question_id: 'B2', excerpts: ['Fun in a grown-up way, never loud or silly.'] }], speaker_note: '' };
+    const again = await as(contributor).post(`/api/interviews/${id}/transcripts/fill`, { transcriptId: up.body.transcriptId, replaceTyped: true });
+    expect(again.body.filled).toEqual(['B2']);
+  });
+
+  it('long transcripts upload; without AI consent nothing is sent to the AI', async () => {
+    const id = await start('No AI T', false);
+    const long = `Mike: ${'We keep it personal and seasonal. '.repeat(3500)}`; // about 120,000 characters
+    const up = await as(contributor).post(`/api/interviews/${id}/transcripts`, { text: long });
+    expect(up.status).toBe(201);
+    const before = prompts.length;
+    const res = await as(contributor).post(`/api/interviews/${id}/transcripts/fill`, { transcriptId: up.body.transcriptId });
+    expect(res.body.reason).toBe('no_consent');
+    expect(prompts.length).toBe(before);
+  });
+
+  it('transcripts cannot be changed, and another interview cannot use them', async () => {
+    const a = await start('Owner A');
+    const b = await start('Owner B');
+    const up = await as(contributor).post(`/api/interviews/${a}/transcripts`, { text: TRANSCRIPT });
+    await expect(h.db.query(`UPDATE interview_transcripts SET body = 'x'`)).rejects.toThrow(/append-only/);
+    expect((await as(contributor).post(`/api/interviews/${b}/transcripts/fill`, { transcriptId: up.body.transcriptId })).body.reason).toBe('no_transcript');
   });
 });
 

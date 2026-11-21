@@ -41,6 +41,8 @@ export function createApp(deps: AppDeps): { app: express.Express; policies: Poli
   app.use(requestId);
   app.use(helmet());
   app.use(cors({ origin: deps.webOrigin }));
+  // Interview transcripts can be long (up to 150,000 characters); every other request stays small.
+  app.use(/^\/api\/interviews\/[^/]+\/transcripts$/, express.json({ limit: '700kb' }));
   app.use(express.json({ limit: '100kb' }));
   app.use(requestLogger);
 

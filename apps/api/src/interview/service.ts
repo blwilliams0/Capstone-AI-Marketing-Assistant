@@ -7,12 +7,13 @@ import {
   type InterviewProposal,
   type InterviewSessionDetail,
   type InterviewSessionSummary,
+  type TranscriptFillResult,
 } from '@the-pocket/shared';
 import { recordAudit } from '../audit.js';
 import { callProvider, guard, type AiDeps } from '../ai/assistant.js';
 import { brandCoreDocuments } from '../ai/context.js';
 import { scrubDocumentKeys } from '../ai/history.js';
-import { INTERVIEW_EXTRACT_SYSTEM, INTERVIEW_FOLLOW_UP_SYSTEM } from '../ai/prompts.js';
+import { INTERVIEW_EXTRACT_SYSTEM, INTERVIEW_FOLLOW_UP_SYSTEM, INTERVIEW_TRANSCRIPT_SYSTEM } from '../ai/prompts.js';
 import { recordUsage } from '../ai/usage.js';
 import { createItemTx } from '../knowledge/service.js';
 import type { AuthContext } from '../types.js';
@@ -32,6 +33,8 @@ const baseId = (questionId: string) => questionId.split('.')[0]!;
 
 interface SessionRow {
   id: string;
+  label: string | null;
+  is_practice: boolean;
   interviewee_name: string;
   interviewee_role: string | null;
   status: 'in_progress' | 'completed';
@@ -44,7 +47,7 @@ interface SessionRow {
 }
 
 const SESSION_SELECT = `
-  SELECT s.id, s.interviewee_name, s.interviewee_role, s.status, s.ai_consent, s.conducted_by, p.name AS conducted_by_name,
+  SELECT s.id, s.label, s.is_practice, s.interviewee_name, s.interviewee_role, s.status, s.ai_consent, s.conducted_by, p.name AS conducted_by_name,
          s.created_at, s.completed_at,
          (SELECT count(*)::int FROM (SELECT DISTINCT ON (question_id) answer FROM interview_answers a
             WHERE a.session_id = s.id ORDER BY question_id, seq DESC) x WHERE btrim(x.answer) <> '') AS answered
@@ -52,6 +55,8 @@ const SESSION_SELECT = `
 
 const toSummary = (r: SessionRow): InterviewSessionSummary => ({
   id: r.id,
+  label: r.label,
+  isPractice: r.is_practice,
   intervieweeName: r.interviewee_name,
   intervieweeRole: r.interviewee_role,
   status: r.status,
@@ -74,15 +79,15 @@ async function getSession(db: Db, restaurantId: string, sessionId: string): Prom
 
 /** The latest answer to each question (an empty answer means it was cleared). */
 async function latestAnswers(db: Db, sessionId: string): Promise<InterviewAnswerView[]> {
-  const rows = await db.query<{ question_id: string; question_text: string; answer: string; recorded_by: string; name: string; created_at: Date | string }>(
-    `SELECT DISTINCT ON (a.question_id) a.question_id, a.question_text, a.answer, a.recorded_by, p.name, a.created_at
+  const rows = await db.query<{ question_id: string; question_text: string; answer: string; recorded_by: string; name: string; created_at: Date | string; source: 'typed' | 'transcript' }>(
+    `SELECT DISTINCT ON (a.question_id) a.question_id, a.question_text, a.answer, a.recorded_by, p.name, a.created_at, a.source
        FROM interview_answers a JOIN profiles p ON p.user_id = a.recorded_by
       WHERE a.session_id = $1 ORDER BY a.question_id, a.seq DESC`,
     [sessionId],
   );
   return rows
     .filter((r) => r.answer.trim() !== '')
-    .map((r) => ({ questionId: r.question_id, questionText: r.question_text, answer: r.answer, recordedBy: { id: r.recorded_by, name: r.name }, recordedAt: iso(r.created_at)! }));
+    .map((r) => ({ questionId: r.question_id, questionText: r.question_text, answer: r.answer, recordedBy: { id: r.recorded_by, name: r.name }, recordedAt: iso(r.created_at)!, source: r.source }));
 }
 
 export async function getInterview(db: Db, restaurantId: string, sessionId: string): Promise<InterviewSessionDetail | null> {
@@ -104,6 +109,14 @@ export async function getInterview(db: Db, restaurantId: string, sessionId: stri
   return {
     ...toSummary(s),
     answers: await latestAnswers(db, sessionId),
+    transcripts: (
+      await db.query<{ id: string; file_name: string | null; characters: number; uploaded_by: string; name: string; created_at: Date | string }>(
+        `SELECT t.id, t.file_name, char_length(t.body) AS characters, t.uploaded_by, p.name, t.created_at
+           FROM interview_transcripts t JOIN profiles p ON p.user_id = t.uploaded_by
+          WHERE t.session_id = $1 ORDER BY t.created_at DESC`,
+        [sessionId],
+      )
+    ).map((t) => ({ id: t.id, fileName: t.file_name, characters: t.characters, uploadedBy: { id: t.uploaded_by, name: t.name }, uploadedAt: iso(t.created_at)! })),
     extractions: extractions.map((e) => ({
       ...e.result,
       id: e.id,
@@ -122,14 +135,14 @@ export async function getInterview(db: Db, restaurantId: string, sessionId: stri
 export async function startInterview(
   db: Db,
   actor: AuthContext,
-  input: { intervieweeName: string; intervieweeRole?: string; aiConsent: boolean },
+  input: { label?: string; isPractice?: boolean; intervieweeName: string; intervieweeRole?: string; aiConsent: boolean },
   requestId?: string,
 ): Promise<{ sessionId: string }> {
   return db.transaction(async (tx) => {
     const [s] = await tx.query<{ id: string }>(
-      `INSERT INTO interview_sessions (restaurant_id, interviewee_name, interviewee_role, notes_consent, ai_consent, conducted_by)
-       VALUES ($1, $2, $3, true, $4, $5) RETURNING id`,
-      [actor.restaurantId, input.intervieweeName, input.intervieweeRole ?? null, input.aiConsent, actor.userId],
+      `INSERT INTO interview_sessions (restaurant_id, interviewee_name, interviewee_role, notes_consent, ai_consent, conducted_by, label, is_practice)
+       VALUES ($1, $2, $3, true, $4, $5, $6, $7) RETURNING id`,
+      [actor.restaurantId, input.intervieweeName, input.intervieweeRole ?? null, input.aiConsent, actor.userId, input.label || null, input.isPractice ?? false],
     );
     await recordAudit(tx, {
       restaurantId: actor.restaurantId,
@@ -348,7 +361,7 @@ export async function extractProposals(deps: AiDeps, actor: AuthContext, session
     `SELECT s.interviewee_name AS name, a.question_id, a.answer FROM (
        SELECT DISTINCT ON (session_id, question_id) session_id, question_id, answer FROM interview_answers
         WHERE restaurant_id = $1 AND session_id <> $2 ORDER BY session_id, question_id, seq DESC) a
-       JOIN interview_sessions s ON s.id = a.session_id AND s.ai_consent AND s.interviewee_name NOT ILIKE 'practice%'
+       JOIN interview_sessions s ON s.id = a.session_id AND s.ai_consent AND NOT s.is_practice
       WHERE btrim(a.answer) <> '' AND a.question_id = ANY($3::text[])
       ORDER BY a.question_id, s.interviewee_name`,
     [actor.restaurantId, sessionId, answers.map((a) => a.questionId)],
@@ -500,4 +513,201 @@ export async function saveProposal(
     );
     return created;
   });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Interview name and practice flag
+
+export async function updateInterview(
+  db: Db,
+  actor: AuthContext,
+  sessionId: string,
+  input: { label?: string | null; isPractice?: boolean },
+  requestId?: string,
+): Promise<'updated' | 'not_found'> {
+  return db.transaction(async (tx) => {
+    const rows = await tx.query(
+      `UPDATE interview_sessions
+          SET label = CASE WHEN $3::boolean THEN $4 ELSE label END,
+              is_practice = COALESCE($5, is_practice)
+        WHERE id = $1 AND restaurant_id = $2 RETURNING id`,
+      [sessionId, actor.restaurantId, input.label !== undefined, input.label || null, input.isPractice ?? null],
+    );
+    if (rows.length === 0) return 'not_found' as const;
+    await recordAudit(tx, {
+      restaurantId: actor.restaurantId,
+      actorUserId: actor.userId,
+      action: 'interview.updated',
+      targetType: 'interview_session',
+      targetId: sessionId,
+      details: { label: input.label, isPractice: input.isPractice },
+      requestId,
+    });
+    return 'updated' as const;
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Transcripts: the AI places the manager's own words under the guide's questions
+
+export async function uploadTranscript(
+  db: Db,
+  actor: AuthContext,
+  sessionId: string,
+  input: { fileName?: string; text: string },
+  requestId?: string,
+): Promise<{ transcriptId: string } | 'not_found' | 'completed'> {
+  const s = await getSession(db, actor.restaurantId, sessionId);
+  if (!s) return 'not_found';
+  if (s.status === 'completed') return 'completed';
+  const [t] = await db.query<{ id: string; sha256: string }>(
+    `INSERT INTO interview_transcripts (session_id, restaurant_id, file_name, body, uploaded_by) VALUES ($1, $2, $3, $4, $5) RETURNING id, sha256`,
+    [sessionId, actor.restaurantId, input.fileName ?? null, input.text, actor.userId],
+  );
+  await recordAudit(db, {
+    restaurantId: actor.restaurantId,
+    actorUserId: actor.userId,
+    action: 'interview.transcript_uploaded',
+    targetType: 'interview_session',
+    targetId: sessionId,
+    details: { transcriptId: t!.id, characters: input.text.length, sha256: t!.sha256 },
+    requestId,
+  });
+  return { transcriptId: t!.id };
+}
+
+export const transcriptOutput = z.object({
+  answers: z.array(z.object({ question_id: z.string(), excerpts: z.array(z.string()) })),
+  speaker_note: z.string(),
+});
+
+export type FillOutcome = TranscriptFillResult | 'not_found' | 'completed' | 'no_consent' | 'no_transcript';
+
+/**
+ * Fills guide answers from a transcript. Every excerpt must appear word for word in the
+ * transcript or it is dropped, so the AI can only place the manager's real words; it can never
+ * write an answer. Typed answers are kept unless the person asks to replace them.
+ */
+export async function fillFromTranscript(
+  deps: AiDeps,
+  actor: AuthContext,
+  sessionId: string,
+  input: { transcriptId: string; replaceTyped: boolean },
+  requestId?: string,
+): Promise<FillOutcome> {
+  const { db } = deps;
+  const s = await getSession(db, actor.restaurantId, sessionId);
+  if (!s) return 'not_found';
+  if (s.status === 'completed') return 'completed';
+  if (!s.ai_consent) return 'no_consent';
+  const [t] = await db.query<{ id: string; body: string }>(`SELECT id, body FROM interview_transcripts WHERE id = $1 AND session_id = $2`, [input.transcriptId, sessionId]);
+  if (!t) return 'no_transcript';
+
+  const ai = await guard(deps, actor, 'interview');
+  const who = oneLine(`${s.interviewee_name}${s.interviewee_role ? ` (${s.interviewee_role})` : ''}`);
+  const questions = INTERVIEW_QUESTIONS.map((q) => `[${q.id}] ${q.question}`).join('\n');
+  const prompt = [
+    `The interviewee is: ${who}`,
+    '',
+    'Interview guide questions:',
+    questions,
+    '',
+    '<transcript>',
+    t.body.replace(/[<>]/g, ''),
+    '</transcript>',
+    '',
+    "Copy the interviewee's own words under the questions they answer.",
+  ].join('\n');
+
+  const res = await callProvider(deps, actor, 'interview', ai, () =>
+    ai.structured({
+      system: INTERVIEW_TRANSCRIPT_SYSTEM,
+      documents: [],
+      prompt,
+      schema: transcriptOutput,
+      effort: 'medium',
+      maxTokens: 16000,
+      mock: () => ({
+        answers: [{ question_id: 'A1', excerpts: [t.body.replace(/\s+/g, ' ').trim().split(' ').slice(0, 8).join(' ')] }],
+        speaker_note: '[MOCK] No AI was called.',
+      }),
+    }),
+  );
+  await recordUsage(db, {
+    restaurantId: actor.restaurantId,
+    userId: actor.userId,
+    task: 'interview',
+    provider: ai.name,
+    model: res.model,
+    usage: res.usage,
+    outcome: res.refused ? 'refused' : res.data ? 'ok' : 'error',
+  });
+
+  const result: TranscriptFillResult = { filled: [], keptTyped: [], notCovered: [], droppedExcerpts: 0, warnings: [], provider: ai.name };
+  if (!res.data) {
+    result.warnings.push(
+      res.refused
+        ? "The assistant can't help with that transcript."
+        : res.truncated
+          ? 'The answer was cut off because the transcript is long. Try once more; if it happens again, split the transcript into two files.'
+          : 'The assistant returned an unreadable result. Please try again.',
+    );
+    result.notCovered = INTERVIEW_QUESTIONS.map((q) => q.id);
+    return result;
+  }
+
+  const transcript = normalizeForQuote(t.body);
+  const existing = new Map((await latestAnswers(db, sessionId)).map((a) => [a.questionId, a]));
+  const guideIds = new Set(INTERVIEW_QUESTIONS.map((q) => q.id));
+  const byQuestion = new Map<string, string[]>();
+  for (const a of res.data.answers) {
+    const id = a.question_id.trim();
+    if (!guideIds.has(id)) continue;
+    for (const e of a.excerpts) {
+      const excerpt = e.trim().slice(0, 4000);
+      const n = normalizeForQuote(excerpt);
+      if (!isSubstantial(n) || !transcript.includes(n)) {
+        result.droppedExcerpts++;
+        continue;
+      }
+      byQuestion.set(id, [...(byQuestion.get(id) ?? []), excerpt]);
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    for (const q of INTERVIEW_QUESTIONS) {
+      const excerpts = byQuestion.get(q.id);
+      if (!excerpts?.length) {
+        if (!existing.has(q.id)) result.notCovered.push(q.id);
+        continue;
+      }
+      const current = existing.get(q.id);
+      if (current && current.source === 'typed' && !input.replaceTyped) {
+        result.keptTyped.push(q.id);
+        continue;
+      }
+      await tx.query(
+        `INSERT INTO interview_answers (session_id, restaurant_id, question_id, question_text, answer, recorded_by, source, transcript_id)
+         VALUES ($1, $2, $3, $4, $5, $6, 'transcript', $7)`,
+        [sessionId, actor.restaurantId, q.id, q.question, excerpts.join('\n\n').slice(0, 8000), actor.userId, t.id],
+      );
+      result.filled.push(q.id);
+    }
+    await recordAudit(tx, {
+      restaurantId: actor.restaurantId,
+      actorUserId: actor.userId,
+      action: 'interview.filled_from_transcript',
+      targetType: 'interview_session',
+      targetId: sessionId,
+      details: { transcriptId: t.id, filled: result.filled.length, keptTyped: result.keptTyped.length, droppedExcerpts: result.droppedExcerpts },
+      requestId,
+    });
+  });
+
+  if (result.droppedExcerpts) {
+    result.warnings.push(`${result.droppedExcerpts} excerpt${result.droppedExcerpts === 1 ? ' was' : 's were'} not word for word in the transcript and ${result.droppedExcerpts === 1 ? 'was' : 'were'} left out.`);
+  }
+  const note = oneLine(res.data.speaker_note).slice(0, 300);
+  if (note) result.warnings.push(`How the assistant found the interviewee: ${note} Check that every answer is their words, not the interviewer's.`);
+  return result;
 }
