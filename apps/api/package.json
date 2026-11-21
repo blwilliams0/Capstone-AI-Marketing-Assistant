@@ -12,7 +12,8 @@
     "test": "vitest run",
     "migrate": "tsx --env-file-if-exists=../../.env.local src/scripts/migrate.ts",
     "bootstrap-admin": "tsx --env-file-if-exists=../../.env.local src/scripts/bootstrap-admin.ts",
-    "load-knowledge": "tsx --env-file-if-exists=../../.env.local src/scripts/load-knowledge.ts"
+    "load-knowledge": "tsx --env-file-if-exists=../../.env.local src/scripts/load-knowledge.ts",
+    "ai-live-check": "tsx --env-file-if-exists=../../.env.local src/scripts/ai-live-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

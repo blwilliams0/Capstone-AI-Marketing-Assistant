@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 import { AUDIENCES, AUDIENCE_LABELS, CHANNELS, CHANNEL_LABELS, type DraftRequest, type DraftResponse } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, Card, buttonClass, inputClass, secondaryButtonClass } from '../ui';
@@ -24,6 +25,31 @@ export function Draft() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
+  const [saving, setSaving] = useState<number | null>(null);
+  const navigate = useNavigate();
+
+  async function save(i: number) {
+    if (!result) return;
+    const o = result.options[i]!;
+    setSaving(i);
+    setError(null);
+    const res = await apiFetch('/api/posts', {
+      method: 'POST',
+      body: {
+        title: o.angle || undefined,
+        channel: form.channel,
+        audience: form.audience,
+        angle: o.angle || undefined,
+        caption: o.caption.slice(0, 10000),
+        photoPlan: result.photoTips.join('\n').slice(0, 4000) || undefined,
+        sourceVersionIds: o.sources.map((s) => s.versionId),
+        origin: 'ai_draft',
+      },
+    });
+    setSaving(null);
+    if (res.ok) navigate(`/posts/${((await res.json()) as { itemId: string }).itemId}`);
+    else setError(await readError(res));
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -101,6 +127,7 @@ export function Draft() {
       {result && (
         <div className="space-y-4">
           {result.provider === 'mock' && <Alert kind="info">Practice mode: these drafts are placeholders because no AI service is connected.</Alert>}
+          {error && <Alert kind="error">{error}</Alert>}
           {result.warnings.map((w, i) => (
             <Alert key={i} kind="error">
               {w}
@@ -114,15 +141,26 @@ export function Draft() {
               <p className="mt-2 text-xs text-stone-600">
                 Based on: {o.sources.length > 0 ? o.sources.map((s) => s.title).join(', ') : 'no approved source (general idea only)'}
               </p>
-              <button
-                className={`${secondaryButtonClass} mt-3`}
-                onClick={() => {
-                  void navigator.clipboard?.writeText(o.caption);
-                  setCopied(i);
-                }}
-              >
-                {copied === i ? 'Copied' : 'Copy text'}
-              </button>
+              {o.repeatNote && (
+                <p className="mt-2 rounded bg-amber-50 p-2 text-xs text-amber-900">
+                  <span className="font-medium">Similar to a recent post: </span>
+                  {o.repeatNote}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button className={buttonClass} disabled={saving !== null} onClick={() => void save(i)}>
+                  {saving === i ? 'Saving…' : 'Save as a post'}
+                </button>
+                <button
+                  className={secondaryButtonClass}
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(o.caption);
+                    setCopied(i);
+                  }}
+                >
+                  {copied === i ? 'Copied' : 'Copy text'}
+                </button>
+              </div>
             </Card>
           ))}
           {result.options.length > 0 && (
@@ -138,7 +176,9 @@ export function Draft() {
                 )}
                 <List title="How to tell if it worked" items={result.howToMeasure} />
                 <List title="Photo tips" items={result.photoTips} />
-                <p className="text-xs text-stone-500">Submitting a draft for approval is the next step and is coming soon.</p>
+                <p className="text-xs text-stone-500">
+                  Save the option you like as a post, fill in anything in [brackets], then submit it for approval. The photo tips are saved with it as the photo plan.
+                </p>
               </div>
             </Card>
           )}

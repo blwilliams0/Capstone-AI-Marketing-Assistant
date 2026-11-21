@@ -1,6 +1,6 @@
 # Development Status
 
-Last updated: 2026-11-13 (end of the overnight coding run). Labels: *working in test*, *live* (verified against the real dev Supabase project), *not yet verified*, *deferred*. Plan: `The_Pocket_AI_Architecture_Addendum_v0_4.md` §7.
+Last updated: 2026-11-18 (M3). The M3 summary below is newest; the 2026-11-13 morning summary is kept for history. Labels: *working in test*, *live* (verified against the real dev Supabase project), *not yet verified*, *deferred*. Plan: `The_Pocket_AI_Architecture_Addendum_v0_4.md` §7.
 
 ## Morning summary (2026-11-13 run)
 
@@ -51,7 +51,7 @@ Last updated: 2026-11-13 (end of the overnight coding run). Labels: *working in 
 
 ## Next (per plan)
 
-- **M3 (Nov 19–22):** save drafts as content items, exact-version approval with digest, administrator self-approval, "Ready to post" assisted posting. Then the Nov 23 prototype.
+- **M3:** done 2026-11-18 (see M3 summary). Next: the Nov 23 prototype demo.
 - **M4:** in-app brand interview (question set from `docs/strategy/BRAND_INTERVIEW_GUIDE.md`), calendar and reminders, fact-expiry nudges, image upload.
 - **M5–M6:** measurement, export, security review, end-to-end test, deployment, guides.
 
@@ -59,6 +59,27 @@ Last updated: 2026-11-13 (end of the overnight coding run). Labels: *working in 
 
 - **Administrators can read staff assistant conversations.** Today conversations are private to the asker. Staff should be told plainly that management can read them before this is turned on.
 - **Controlled guardrails** on what the assistant will discuss or draft (scope to be defined with management: for example topic limits, banned claims, escalation to a manager).
+
+## M3 summary (2026-11-18, branch `m3-approve-and-post`, not pushed)
+
+**Built:**
+- **Posts:** save an assistant draft (or write one yourself), edit (each save is a new version), submit, and approve, ask for changes or decline.
+- **Self-approval:** administrators only, with an extra confirmation.
+- **Ready to post:** copy the exact approved text, post by hand, and record it with the link.
+- **Activity:** the permanent history.
+- **Avoid repeating ideas** (owner request): drafts see one line per post approved or posted in the last 6 months and per idea drafted in the last 30 days, and each option says if it resembles a recent one. Verified live.
+- **Bug fixed:** internal document keys ("D1–D3") no longer appear in anything staff read.
+- **Demo:** [DEMO_SCRIPT.md](DEMO_SCRIPT.md).
+
+**Verified:**
+- 185 tests pass.
+- A Fable security review found no critical or high-severity issues; all nine of its findings were fixed.
+- Migration 005 is live, and the security check is clean.
+- Two live Claude drafts worked. Details in TEST_LOG §8.
+
+**Needs you before Nov 23:** follow "The day before" in DEMO_SCRIPT.md, which covers the second account, a few real facts, and one rehearsal. Rotating the database password is still open.
+
+**Costs, measured:** a question is about 4 cents and a draft about 8 cents (an earlier estimate of 5 cents was low). Total live spend so far: about $0.21.
 
 ## Known limitations
 

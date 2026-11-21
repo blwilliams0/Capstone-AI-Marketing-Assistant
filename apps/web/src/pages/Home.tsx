@@ -9,10 +9,12 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   'knowledge.propose': 'Suggest new brand rules, facts and documents',
   'assistant.use': 'Ask the marketing assistant',
   'analytics.view': 'See marketing reports',
+  'content.view': 'See posts and their approval history',
   'content.draft': 'Draft marketing content',
   'approval.request': 'Submit drafts for review',
   'data.import': 'Import sales and reservation reports',
-  'post.approve': 'Approve marketing posts',
+  'post.approve': 'Approve other people\'s marketing posts',
+  'post.record': 'Record approved posts as posted',
   'brand.approve': 'Approve brand rules and facts',
   'channel.connect': 'Connect social media accounts',
   'users.invite': 'Invite staff',
@@ -67,8 +69,20 @@ export function Home() {
             <p className="text-sm text-stone-600">Invite people, see who has access, remove access.</p>
           </Link>
         )}
+        {can('content.view') && (
+          <Link to="/posts" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
+            <p className="font-medium">{can('post.approve') ? 'Review and approve posts' : 'Posts'}</p>
+            <p className="text-sm text-stone-600">Drafts, posts waiting for approval, and everything already posted.</p>
+          </Link>
+        )}
+        {can('post.record') && (
+          <Link to="/ready" className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
+            <p className="font-medium">Ready to post</p>
+            <p className="text-sm text-stone-600">Copy the approved text, post it yourself, and record it.</p>
+          </Link>
+        )}
         <div className="rounded-lg border border-dashed border-stone-300 p-5 text-stone-500">
-          <p className="font-medium">Review and approve · Plan and measure</p>
+          <p className="font-medium">Plan and measure</p>
           <p className="text-sm">Coming next.</p>
         </div>
       </div>

@@ -120,7 +120,7 @@ describe('draft checking', () => {
   it('removes references to documents the model was not given and warns', () => {
     const out = checkDraft(
       {
-        options: [{ caption: 'c', angle: 'a', why_it_fits: 'w', uses_documents: ['D1', 'D9', 'D1'] }],
+        options: [{ caption: 'c', angle: 'a', why_it_fits: 'w', uses_documents: ['D1', 'D9', 'D1'], repeat_check: '' }],
         what_to_confirm: [],
         risks: [],
         suggested_timing: '',
@@ -130,11 +130,12 @@ describe('draft checking', () => {
       [doc('D1', true)],
     );
     expect(out.options[0]!.sources.map((s) => s.title)).toEqual(['Title D1']);
-    expect(out.warnings.join(' ')).toMatch(/D9/);
+    expect(out.warnings.join(' ')).toMatch(/claimed support from a source/);
+    expect(out.warnings.join(' ')).not.toMatch(/D9/); // internal keys never shown to staff
   });
 
   it('flags captions that are too long and keeps at most three options', () => {
-    const opt = { caption: 'x'.repeat(2300), angle: '', why_it_fits: '', uses_documents: [] };
+    const opt = { caption: 'x'.repeat(2300), angle: '', why_it_fits: '', uses_documents: [], repeat_check: '' };
     const out = checkDraft({ options: [opt, opt, opt, opt], what_to_confirm: [], risks: [], suggested_timing: '', how_to_measure: [], photo_tips: [] }, []);
     expect(out.options).toHaveLength(3);
     expect(out.warnings.some((w) => /longer than 2200/.test(w))).toBe(true);

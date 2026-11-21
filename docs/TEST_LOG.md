@@ -221,3 +221,61 @@ Started with no `ANTHROPIC_API_KEY` and no `NODE_ENV`: startup log `aiMode: disa
 - Any live Claude request (no API key yet). The exact request shape is unit-tested against the installed SDK's types and a fake client only.
 - The new screens (sign-in recovery, staff, knowledge, ask, create a post) in a browser.
 - Real sign-in end to end.
+
+## 7. First live Claude check (2026-11-18)
+
+Owner added an Anthropic Console API key to `.env.local` (not shown to or by Claude Code). API restarted with `"aiMode":"claude"`.
+
+Run with `npm run ai-live-check -w @the-pocket/api` (new script: one real question as the first active admin, through the same `ask()` code the app uses; prints the answer, sources and usage, never keys).
+
+| # | Question | Input tok | Output tok | Cache read | Cache write | Est. cost |
+|---|---|---|---|---|---|---|
+| 1 | "What tone should our Instagram captions use, and what should we avoid?" | 2,627 | 960 | 0 | 2,138 | $0.0404 |
+| 2 | "x" (sent by mistake while checking the log; the script now rejects questions under 3 characters) | 6 | 780 | 2,138 | 0 | $0.0161 |
+
+Results:
+- Model `claude-opus-5-5`, outcome `ok`, not refused. Answer used the 3 approved brand rules (brand core) plus 8 strategy/reference sections chosen by full-text search.
+- Citations mapped back to approved knowledge versions, with quotes. Answer kept brand rules apart from research ideas and listed what management still needs to confirm.
+- Prompt caching confirmed: call 2 read the 2,138-token brand core from cache.
+- Usage events recorded in `ai_usage_events`; 2 conversations stored under the admin account.
+- Total spend so far: about $0.056.
+
+## 8. M3: approve and post (2026-11-18)
+
+**Automated:** 185 tests passing (shared 7, db 57, api 114, worker 7). Build, strict typecheck, lint and bundle secret scan clean.
+- New database tests (`packages/db/src/content.test.ts`, 25):
+  - digest computed by the database (supplied values ignored); versions immutable
+  - approval copies the digest; only the latest version can be submitted or approved
+  - only active approvers or admins decide; self-approval (requester, creator or any version's author) is admin-only and must be flagged exactly
+  - an edit supersedes waiting or approved requests, with the history recorded
+  - posting only from an approved request; posted posts are locked
+  - changed, retired or expired cited knowledge blocks approval and posting in the database
+  - viewers and former staff can't write; history is append-only; archiving is one-way
+- New API tests (`content.test.ts`, `ai-history.test.ts`):
+  - the full journey, the role rules, self-approval laundering, and the fingerprint mismatch check
+  - sources must be current; edits refresh sources and record removed ones; archive permissions; tenant isolation
+  - recent-post history in the draft prompt (opening line only; cannot escape its tag); document keys removed from output
+
+**Independent review:** a Fable-model security review of the M3 diff found no critical or high-severity issues. All nine of its findings were fixed before applying:
+- knowledge-freshness checks moved into the database
+- removed sources are recorded and shown to the approver
+- "self" now includes every author of a post
+- archiving is limited to the creator or a reviewer, and the database refuses to archive a posted item
+- neutral wording for "superseded" in the history
+- no keys in warnings, and keys are deleted (not replaced) in captions
+- stricter cleaning of history lines
+- item-row locks to order concurrent actions
+- `search_path` pinned on the new functions, and active-member checks for writers and submitters
+
+**Live dev database:** migration 005 applied.
+- 20 tables, all with RLS.
+- 0 public-role grants on tables, 0 executable functions, 0 sequence access (counts only).
+
+**Live Claude drafts** (same request twice: locals, Instagram, "Bring locals back on weeknights", "Wine on the covered patio"):
+
+| # | Input | Output | Cache read | Cache write | Est. cost | Result |
+|---|---|---|---|---|---|---|
+| 1 | 2,615 | 3,005 | 0 | 2,189 | $0.0815 | 3 distinct angles, no document keys, no warnings, 36 s |
+| 2 | 2,851 | 3,039 | 2,189 | 0 | $0.0726 | All three openings new; one option flagged its overlap with draft 1's idea and explained the difference |
+
+Drafts cost more than questions (about 3,000 output tokens), so about 7–8 cents each. Total live spend to date: about $0.21.

@@ -7,6 +7,7 @@ import type { AuthAdmin } from './auth/auth-admin.js';
 import { PolicyRouter } from './policy.js';
 import { addKnowledgeRoutes } from './knowledge/routes.js';
 import { addAssistantRoutes } from './ai/routes.js';
+import { addContentRoutes } from './content/routes.js';
 import type { AiProvider } from './ai/provider.js';
 
 export interface RouteDeps {
@@ -190,6 +191,7 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
   });
 
   addKnowledgeRoutes(r, db);
+  addContentRoutes(r, db);
   addAssistantRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
 
   return r;

@@ -1,4 +1,4 @@
-# API Reference (Stage 1)
+# API Reference
 
 Base URL in development: `http://localhost:3000`. All routes under `/api` require `Authorization: Bearer <token>` (a Supabase access token). Every route also declares a required permission; a caller without it gets `403`.
 
@@ -30,6 +30,25 @@ Base URL in development: `http://localhost:3000`. All routes under `/api` requir
 | `POST /api/drafts/generate` | `content.draft` | `{ audience: locals|tourists|both, channel, goal, topic }` → 2–3 options with the sources each relies on, what to confirm, risks, timing, measures, photo tips, warnings. Nothing is saved or posted. |
 | `GET /api/ai/usage` | `analytics.view_sensitive` (admin) | Estimated AI spend this month, budget, request count. |
 
+**Posts, approval and assisted posting (M3).** A post has immutable versions; the database computes each version's canonical snapshot and SHA-256 fingerprint. An approval covers exactly one version. Saving an edit creates a new version and the database supersedes any waiting or approved request.
+
+| Method and path | Who may call it | Purpose |
+|---|---|---|
+| `GET /api/posts?archived=true` | `content.view` | All posts with status (`draft`, `in_review`, `changes_requested`, `rejected`, `approved`, `posted`, `archived`) and blockers. Archived hidden unless asked. |
+| `GET /api/posts/:itemId` | `content.view` | Versions (with sources and whether each is still current), approval requests, post record, history. |
+| `POST /api/posts` | `content.draft` | `{ channel, audience, caption, title?, angle?, photoPlan?, scheduledFor?, sourceVersionIds[], origin: human|ai_draft }`. Sources must be approved, current knowledge (400 `invalid_sources`). |
+| `POST /api/posts/:itemId/versions` | `content.draft` | Save an edit `{ caption, angle?, photoPlan?, channel?, audience?, scheduledFor? }`. Outdated sources are replaced by the current approved version of the same rule or fact. 409 once posted or archived. |
+| `POST /api/posts/:itemId/submit` | `approval.request` | Submit the latest version `{ note? }`. 409 `already_open` if waiting or approved. |
+| `POST /api/posts/:itemId/archive` | `content.draft` | Withdraw/supersede open requests and hide. Not allowed once posted. |
+| `POST /api/approvals/:approvalId/approve` | `post.approve` | `{ note?, confirmSelfApproval? }`. If you submitted or wrote the version: 403 `self_not_allowed` unless you are an administrator; administrators need `confirmSelfApproval: true` (409 otherwise) and it is recorded as self-approval. 409 `stale_sources` if a cited rule or fact changed. |
+| `POST /api/approvals/:approvalId/request-changes` · `/reject` | `post.approve` | `{ note }` (required). |
+| `POST /api/approvals/:approvalId/withdraw` | `approval.request` | The submitter or an administrator. |
+| `GET /api/posts/ready` | `post.record` | Approved posts not yet posted: exact text, fingerprint, blockers. |
+| `POST /api/approvals/:approvalId/posted` | `post.record` | `{ digest, postUrl?, note? }` after posting by hand. `digest` must equal the approved fingerprint (409 `digest_mismatch`); 409 `stale_sources`, `not_approved`, `already_posted`. Posted posts are locked. |
+| `GET /api/activity?limit=100` | `content.view` | Append-only approval and posting history. |
+
+Drafting (`POST /api/drafts/generate`) now also sends a one-line summary of each post approved or posted in the last 6 months and of ideas drafted in the last 30 days (angle and opening line only; at most 80 + 40 lines), and returns `repeatNote` per option. Records are kept; the window only limits what the AI receives. Document keys (D1…) are removed from any text shown to staff.
+
 AI routes return **503** when no AI is configured (`reason: disabled`) or this month's budget is reached (`reason: budget`), and **502** if the AI service fails. They have an extra limit of 30 requests per 10 minutes per person.
 
 All `/api` routes are rate limited (300 requests per 5 minutes per IP and per signed-in user; 429 with `Retry-After`).
@@ -40,11 +59,11 @@ The old `/api/qwen/*` and `/api/social/*` routes from the first draft were remov
 
 | Permission | Admin | Approver | Contributor | Viewer |
 |---|:-:|:-:|:-:|:-:|
-| `knowledge.view`, `analytics.view` | yes | yes | yes | yes |
+| `knowledge.view`, `analytics.view`, `content.view` | yes | yes | yes | yes |
 | `knowledge.propose`, `assistant.use` | yes | yes | yes | no |
-| `content.draft` | yes | yes | yes | no |
-| `approval.request`, `data.import` | yes | no | yes | no |
-| `post.approve` | yes | yes | no | no |
+| `content.draft`, `approval.request`, `post.record` | yes | yes | yes | no |
+| `data.import` | yes | no | yes | no |
+| `post.approve` (never your own, except administrators with confirmation) | yes | yes | no | no |
 | `brand.approve`, `channel.connect`, `users.invite`, `users.manage`, `data.export`, `analytics.view_sensitive`, `audit.view` | yes | no | no | no |
 
 The matrix is defined once in `packages/shared/src/roles.ts` and tested in `roles.test.ts`. Roles always come from the database membership, never from token contents.
@@ -57,7 +76,7 @@ The matrix is defined once in `packages/shared/src/roles.ts` and tested in `role
 | 401 | Missing, expired or invalid token. |
 | 403 | Signed in but not allowed (wrong role, no membership, or access removed). |
 | 404 | Not found (also returned for another restaurant's data). |
-| 409 | Conflict (already a member; already removed; last administrator). |
+| 409 | Conflict (already a member; already removed; last administrator; already decided; approval no longer applies; fingerprint mismatch; outdated sources). Body includes `reason`. |
 | 502 | The invitation email could not be sent. |
 | 503 | Invitations not configured (`SUPABASE_SECRET_KEY` missing). |
 | 500 | Unexpected error. Includes a `requestId` for support; no internal details. |
