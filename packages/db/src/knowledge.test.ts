@@ -13,6 +13,7 @@ beforeAll(async () => {
   await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [uid, 'k@x.test']);
   await db.query('INSERT INTO profiles (user_id, email, name) VALUES ($1, $2, $3)', [uid, 'k@x.test', 'K']);
   rid = (await db.query<{ id: string }>(`INSERT INTO restaurants (name) VALUES ('R') RETURNING id`))[0]!.id;
+  await db.query(`INSERT INTO memberships (restaurant_id, user_id, role, status) VALUES ($1, $2, 'admin', 'active')`, [rid, uid]);
 });
 
 async function newItem(kind = 'brand_rule', inCore = false) {
@@ -34,6 +35,21 @@ async function propose(itemId: string, version: number, body = 'Describe the pat
 
 const approve = (vid: string) =>
   db.query(`UPDATE knowledge_versions SET status = 'approved', decided_by = $2, decided_at = now() WHERE id = $1`, [vid, uid]);
+
+describe('knowledge approval authority (database level)', () => {
+  it('only an active administrator can approve or reject', async () => {
+    const approverId = randomUUID();
+    await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [approverId, 'ap@x.test']);
+    await db.query('INSERT INTO profiles (user_id, email, name) VALUES ($1, $2, $3)', [approverId, 'ap@x.test', 'Ap']);
+    await db.query(`INSERT INTO memberships (restaurant_id, user_id, role, status) VALUES ($1, $2, 'approver', 'active')`, [rid, approverId]);
+    const v = await propose(await newItem(), 1, 'Approver tries to approve this.');
+    const decideAs = (who: string, status: string) =>
+      db.query(`UPDATE knowledge_versions SET status = $3, decided_by = $2, decided_at = now(), decision_note = 'x' WHERE id = $1`, [v.id, who, status]);
+    await expect(decideAs(approverId, 'approved')).rejects.toThrow(/only an active administrator/);
+    await expect(decideAs(approverId, 'rejected')).rejects.toThrow(/only an active administrator/);
+    await decideAs(uid, 'approved');
+  });
+});
 
 describe('knowledge library schema', () => {
   it('computes the digest in the database from the body', async () => {

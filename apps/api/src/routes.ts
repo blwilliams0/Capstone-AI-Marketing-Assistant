@@ -8,7 +8,11 @@ import { PolicyRouter } from './policy.js';
 import { addKnowledgeRoutes } from './knowledge/routes.js';
 import { addAssistantRoutes } from './ai/routes.js';
 import { addContentRoutes } from './content/routes.js';
+import { addInterviewRoutes } from './interview/routes.js';
+import { addCalendarRoutes } from './calendar/routes.js';
 import type { AiProvider } from './ai/provider.js';
+import type { MediaStore } from './media/store.js';
+import { addMediaRoutes } from './media/routes.js';
 
 export interface RouteDeps {
   db: Db;
@@ -17,6 +21,7 @@ export interface RouteDeps {
   /** null: AI routes answer 503 (no provider configured). */
   ai: AiProvider | null;
   aiBudgetUsd: number;
+  media?: MediaStore;
   /** Extra per-user limit for routes that call the AI (they cost money). */
   aiLimit: RequestHandler;
 }
@@ -191,7 +196,10 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
   });
 
   addKnowledgeRoutes(r, db);
-  addContentRoutes(r, db);
+  addContentRoutes(r, db, deps.media);
+  addCalendarRoutes(r, db);
+  addMediaRoutes(r, db, deps.media);
+  addInterviewRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
   addAssistantRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
 
   return r;

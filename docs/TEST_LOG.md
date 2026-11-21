@@ -279,3 +279,115 @@ Results:
 | 2 | 2,851 | 3,039 | 2,189 | 0 | $0.0726 | All three openings new; one option flagged its overlap with draft 1's idea and explained the difference |
 
 Drafts cost more than questions (about 3,000 output tokens), so about 7–8 cents each. Total live spend to date: about $0.21.
+
+## 9. M4a: brand interview in the app (2026-11-18)
+
+**Automated:** 194 tests passing (shared 7, db 57, api 123, worker 7). Build, strict typecheck, lint and bundle scan clean.
+
+`interview.test.ts` (9 tests) covers:
+- notes consent is required, and viewers can't run interviews
+- guide questions keep the guide's wording, and answers are append-only (latest wins)
+- completed interviews are locked
+- without AI consent nothing is sent to the AI, guide follow-ups are used instead, and consent cannot be added afterwards
+- AI follow-ups take the next free ID; withdrawing consent stops AI use
+- drafted rules keep only quotes found word for word in the answers, and unsupported suggestions are dropped
+- other managers' answers are given for spotting disagreements
+- saved suggestions are knowledge **proposals** with a source note built from the verified quotes, saved once only, and approvable only by an administrator
+- tenant isolation
+
+**Known flake:** `interview.test.ts` crashed twice with the Windows PGlite worker error (0xC0000409), then passed alone and in two full runs. This is the same platform issue as before (see Known limitations), not a test failure.
+
+**Live dev database:** migration 006 applied. 24 tables, all with RLS. 0 public-role grants on tables, 0 executable functions, 0 sequence access.
+
+**Live AI:** not run. A live test would create a permanent interview record in the real database, so the first real use is the owner's interview with management. Expected costs: a follow-up suggestion is about 1 cent (low effort); drafting rules from a full interview is roughly 15–30 cents (high effort, long input). Not yet measured.
+
+## 10. M4b: calendar and reminders (2026-11-18)
+
+**Automated:** 205 tests passing (shared 7, db 62, api 127, worker 9).
+
+`reminders.test.ts` (db) checks:
+- the right reminders go to the right people:
+  - post due → staff who can post
+  - post overdue → staff who can post
+  - not submitted → whoever started the post
+  - waiting for approval → reviewers other than the requester
+  - fact expiring or expired → administrators
+  - viewers get none
+- Carmel local time in the wording
+- running the scan again creates nothing
+- only "read" can change, and only once; nothing can be deleted
+- links must be in-app paths
+
+`worker.test.ts`: one scan per restaurant per 15 minutes however often it is scheduled; the handler table is only `reminders.scan` and `system.noop` (still no publishing handler).
+
+`calendar.test.ts`: scheduled posts in range, posts without a date, fact expiry dates, range validation, reminders per person, marking read (only your own).
+
+**Live dev database:** migration 007 applied. 25 tables, all with RLS, and 0 public access. One live reminder scan ran cleanly and created 0 reminders (nothing scheduled yet).
+
+**No AI calls and no paid services:** reminders are in-app only.
+
+## 11. M4 security review fixes (2026-11-18)
+
+A Fable-model review of the M4 diff found no critical or high-severity issues. All findings were fixed:
+- Saving an interview suggestion re-checks its quotes against the latest answers (409 `quotes_changed`) and is refused once AI consent is withdrawn (409 `no_consent`), since saved rules and quotes later reach the AI as brand knowledge. The confirmation text now says exactly what withdrawing does.
+- Follow-up question text and names are flattened to one line with no tags or quotes before going into prompts, so they cannot forge another manager's answers.
+- Quotes must be at least 3 words or 12 characters; at most 5 per suggestion; the source note keeps whole quotes only.
+- Disagreements are labelled as the assistant's summary, not checked word for word.
+- A saved suggestion shows the wording actually saved, and the audit records whether it was edited first.
+- The calendar uses a date-filtered query, so older scheduled posts can't drop off.
+- Reminder scans run in the background of `GET /notifications`.
+- Overdue reminders cover the last 14 days only, so there is no backlog on first scan or for new staff.
+- Migration 008: interview triggers lock the session row (`FOR SHARE`); reminder links must be `/name/...` (no `//host`). Consent withdrawn while the AI is working stores nothing.
+
+**Accepted, documented:**
+- Two browser tabs suggesting a follow-up to the same question at the same moment can get the same follow-up ID; the later answer wins (both are kept in history).
+- Notifications and job history are append-only and grow (about 96 small scan jobs a day). A retention or cleanup step is planned with deployment (M6).
+
+**Results:** 208 tests passing (shared 7, db 62, api 130, worker 9). Live dev database: migration 008 applied; 25 tables with RLS; 0 public access.
+
+## 12. M4c: photo upload (2026-11-18)
+
+**Setup:** private Supabase Storage bucket `post-media` created with the owner's approval (`npm run create-media-bucket -w @the-pocket/api`; safe to re-run). Settings: public off, 10 MB limit, JPEG/PNG/WebP only.
+
+**Automated:** 214 tests passing (shared 7, db 62, api 136, worker 9). `media.test.ts` uses an in-memory store and checks:
+- upload links go to a fresh path inside this restaurant and post; viewers cannot upload; other tenants get 404
+- the server checks the file's real type from its first bytes, enforces the size limit, refuses paths from other posts and `../`, and fingerprints the file
+- the photo is saved as a new version whose digest changes, so an approved post needs approval again
+- view links are short-lived (300 s) and tenant-scoped; removal works; posted posts are locked; with no storage configured the routes answer 503
+
+**Live check** (one test file, deleted afterwards):
+- upload with a one-time link: OK; server download matches
+- reusing the link to overwrite: **refused**
+- anonymous download: **refused**; anonymous listing sees 0 files; public URL: **400**
+- signed view link: 200
+
+## 13. Photo review and project-wide bug hunt fixes (2026-11-21)
+
+Two Fable-model reviews (photo upload security; whole-project bug hunt plus plan risks). Neither found a critical issue or a blocker on the scripted demo path. Fixed:
+
+**Photos**
+- The stored photo's fingerprint is re-checked before approval and before "I posted it" (409 `photo_changed`).
+- Rejected uploads are deleted; size is checked before reading a file into memory.
+- Upload routes have their own limit (60 per person per 10 minutes).
+- "Remove photo" with no photo does nothing instead of cancelling an approval.
+- The bucket is confirmed private at every API start.
+- Real download links; image links refresh after expiry; clearer "version fingerprint" and "photo file ID" labels.
+
+**Demo-relevant**
+- A dropped database connection no longer crashes the API (pool error handler, connect timeout).
+- The screen's "your own post" rule now matches the server (creator, any version's author, or requester).
+- A passing server problem (429, 500, network) no longer signs people out; only a 401 does.
+- Network failures show a message instead of leaving buttons stuck on "Saving…".
+- "Save as a post" caps the title (200) and angle; up to 50 sources; optional post name such as "DEMO – …".
+- Interview notes typed while a save is in flight are no longer overwritten.
+- Knowledge: full text can be expanded before approving; "Propose a change" keeps the source and can set a new expiry; the edit box starts from the current version.
+- Post History shows saves and approval events in time order; the reminder badge updates as soon as reminders are read; guide follow-ups no longer repeat.
+- Interview rule drafting: 16,000-token output limit, 5-minute timeout with one retry, and a clear message if the answer is cut off.
+
+**Data hygiene and integrity**
+- Posts titled "DEMO…" are kept but never sent to the AI as recent history; interviews named "PRACTICE…" are left out of the comparison between managers.
+- Migration 009: the database itself refuses knowledge approval or rejection by anyone but an active administrator; two indexes on approval requests.
+
+**Results:** 216 tests passing (shared 7, db 63, api 137, worker 9). Live: migration 009 applied; 25 tables with RLS; 0 public access.
+
+**Deferred (recorded in STATUS):** `trust proxy`, and moving rate limits into the database (deployment, M6); long AI calls as background jobs if the host cuts requests short; admin view of staff chats needs a notice and consent design first; KPI "cost unknown" for failed AI calls (M5); paging instead of the 200 and 300 caps (M5); one shared restaurant time zone; Supabase free-tier pausing and backups (Dec 1 gate); growth of job and notification history; a migration lock for multiple instances; web UI tests (M6 Playwright).

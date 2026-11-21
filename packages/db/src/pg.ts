@@ -32,6 +32,11 @@ function wrapClient(client: pg.PoolClient | pg.Pool, owner?: pg.Pool): Db {
 }
 
 export function createPgDb(connectionString: string): Db {
-  const pool = new pg.Pool({ connectionString, max: 5 });
+  const pool = new pg.Pool({ connectionString, max: 5, connectionTimeoutMillis: 10_000, idleTimeoutMillis: 30_000 });
+  // An idle connection dropped by the server (laptop sleep, Wi-Fi change) must not crash the
+  // process: the pool discards it and opens a new one on the next query.
+  pool.on('error', (err) => {
+    console.error(JSON.stringify({ level: 'warn', msg: 'database connection dropped; it will reconnect', error: err.message }));
+  });
   return wrapClient(pool, pool);
 }

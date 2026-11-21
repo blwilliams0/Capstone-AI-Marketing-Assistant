@@ -29,6 +29,8 @@ export async function recentMarketing(db: Db, restaurantId: string): Promise<str
     `SELECT COALESCE(r.posted_at, a.decided_at) AS at, v.channel, v.angle, v.caption, (r.id IS NOT NULL) AS posted
        FROM approval_requests a
        JOIN content_versions v ON v.id = a.content_version_id
+       -- Demo posts (titles starting with DEMO) are kept in history but never shown to the AI.
+       JOIN content_items i ON i.id = a.item_id AND i.title NOT ILIKE 'demo%'
        LEFT JOIN post_records r ON r.approval_id = a.id
       WHERE a.restaurant_id = $1 AND a.status = 'approved'
         AND COALESCE(r.posted_at, a.decided_at) > now() - make_interval(months => $2)

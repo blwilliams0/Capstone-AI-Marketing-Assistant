@@ -55,6 +55,24 @@ All `/api` routes are rate limited (300 requests per 5 minutes per IP and per si
 
 The old `/api/qwen/*` and `/api/social/*` routes from the first draft were removed. Publishing will never be a public HTTP endpoint; it will only happen in the worker after an approval is re-checked (Stage 4).
 
+
+**Photos (M4c).** Private bucket `post-media`. The browser never gets general storage access.
+
+| Method and path | Who may call it | Purpose |
+|---|---|---|
+| `POST /api/posts/:itemId/media/upload-link` | `content.draft` | `{ contentType: image/jpeg, image/png or image/webp }` → one-time upload link for a fresh, server-chosen path. |
+| `POST /api/posts/:itemId/media` | `content.draft` | `{ path }` after uploading. The server downloads it, checks the real type and size (10 MB), fingerprints it (SHA-256) and saves a **new version**, so an approved post needs approval again. |
+| `POST /api/posts/:itemId/media/remove` | `content.draft` | New version without a photo. |
+| `GET /api/posts/:itemId/media?versionId=` | `content.view` | Short-lived (5 minute) link to view or download that version's photo. |
+
+**Brand interviews (M4a)**, all `interview.conduct` except saving a suggestion (`knowledge.propose`):
+- `GET` and `POST /api/interviews`, `GET /api/interviews/:sessionId`
+- `POST /api/interviews/:sessionId/` + `answers`, `follow-up`, `extract`, `proposals`, `complete` or `withdraw-ai-consent`
+
+**Calendar and reminders (M4b):**
+- `GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` (`content.view`, at most 92 days)
+- `GET /api/notifications`, `POST /api/notifications/:notificationId/read`, `POST /api/notifications/read-all` (any member, own reminders only)
+
 ## Roles and permissions
 
 | Permission | Admin | Approver | Contributor | Viewer |

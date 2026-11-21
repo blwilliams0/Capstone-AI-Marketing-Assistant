@@ -6,6 +6,7 @@ import { createSupabaseVerifier } from './auth/tokens.js';
 import { loadConfig } from './config.js';
 import { createClaudeAiProvider, createClaudeClient } from './ai/claude.js';
 import { createMockAiProvider } from './ai/provider.js';
+import { createSupabaseMediaStore, ensureMediaBucket } from './media/store.js';
 
 const config = loadConfig(); // throws (and the process exits) on unsafe or incomplete configuration
 
@@ -44,7 +45,19 @@ const ai =
       ? createMockAiProvider()
       : null;
 
-const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd });
+const media =
+  config.supabaseUrl && config.supabaseSecretKey
+    ? createSupabaseMediaStore({ supabaseUrl: config.supabaseUrl, secretKey: config.supabaseSecretKey })
+    : undefined;
+
+// Make sure the photo bucket exists and is private (photos must never be public). Never fatal.
+if (config.supabaseUrl && config.supabaseSecretKey) {
+  ensureMediaBucket({ supabaseUrl: config.supabaseUrl, secretKey: config.supabaseSecretKey })
+    .then((outcome) => console.log(JSON.stringify({ level: 'info', msg: 'photo storage checked', outcome })))
+    .catch((err: unknown) => console.error(JSON.stringify({ level: 'error', msg: 'photo storage check failed', error: err instanceof Error ? err.message : String(err) })));
+}
+
+const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd, media });
 
 const server = app.listen(config.port, () => {
   console.log(

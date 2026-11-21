@@ -31,7 +31,7 @@ export class AiUnavailableError extends Error {
 const consultedOf = (docs: AiDocument[]) => docs.map((d) => ({ title: d.title, kind: d.kind, core: d.core }));
 
 /** Fails closed: no provider, or this month's estimated spend has reached the budget. */
-async function guard(deps: AiDeps, actor: AuthContext, task: AiTask): Promise<AiProvider> {
+export async function guard(deps: AiDeps, actor: AuthContext, task: AiTask): Promise<AiProvider> {
   if (!deps.ai) throw new AiUnavailableError('disabled');
   if ((await monthToDateCostUsd(deps.db, actor.restaurantId)) >= deps.budgetUsd) {
     await recordUsage(deps.db, {
@@ -48,7 +48,7 @@ async function guard(deps: AiDeps, actor: AuthContext, task: AiTask): Promise<Ai
   return deps.ai;
 }
 
-async function callProvider<T>(deps: AiDeps, actor: AuthContext, task: AiTask, ai: AiProvider, fn: () => Promise<T>): Promise<T> {
+export async function callProvider<T>(deps: AiDeps, actor: AuthContext, task: AiTask, ai: AiProvider, fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { enqueueJob, type Db } from '@the-pocket/db';
 import { createTestDb } from '@the-pocket/db/testing';
-import { defaultHandlers, runOnce, type JobHandler } from './worker.js';
+import { buildHandlers, defaultHandlers, runOnce, scheduleReminderScans, type JobHandler } from './worker.js';
 
 let db: Db;
 let rid: string;
@@ -71,5 +71,21 @@ describe('worker', () => {
     ]);
     expect(executions).toBe(1);
     expect(results.filter((r) => r === 'succeeded')).toHaveLength(1);
+  });
+});
+
+describe('reminder scans', () => {
+  it('queues one scan per restaurant per 15-minute window, however often it is called', async () => {
+    await db.query(`UPDATE jobs SET status = 'cancelled' WHERE status IN ('queued', 'running')`);
+    const t = new Date('2026-12-01T18:01:00Z');
+    expect(await scheduleReminderScans(db, t)).toBe(1);
+    expect(await scheduleReminderScans(db, new Date('2026-12-01T18:14:00Z'))).toBe(0);
+    expect(await scheduleReminderScans(db, new Date('2026-12-01T18:16:00Z'))).toBe(1);
+  });
+
+  it('runs the scan job through the normal handler table, and still has no publishing handler', async () => {
+    const handlers = buildHandlers(db);
+    expect(Object.keys(handlers).sort()).toEqual(['reminders.scan', 'system.noop']);
+    expect(await runOnce(db, 'w-scan', handlers)).toBe('succeeded');
   });
 });

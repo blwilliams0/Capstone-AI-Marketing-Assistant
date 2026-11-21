@@ -153,7 +153,12 @@ export interface CreateInput {
 
 /** Creates an item with its first version, always as a proposal awaiting approval. */
 export async function createItem(db: Db, actor: AuthContext, input: CreateInput, requestId?: string) {
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => createItemTx(tx, actor, input, requestId));
+}
+
+/** Same as createItem, inside a transaction the caller already holds. */
+export async function createItemTx(tx: Db, actor: AuthContext, input: CreateInput, requestId?: string) {
+  {
     const [item] = await tx.query<{ id: string }>(
       `INSERT INTO knowledge_items (restaurant_id, kind, title, in_brand_core, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
       [actor.restaurantId, input.kind, input.title, input.kind === 'brand_rule' || input.kind === 'fact', actor.userId],
@@ -180,7 +185,7 @@ export async function createItem(db: Db, actor: AuthContext, input: CreateInput,
       requestId,
     });
     return { itemId: item!.id, versionId: v.id };
-  });
+  }
 }
 
 export async function proposeVersion(

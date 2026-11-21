@@ -5,6 +5,7 @@ export type Role = (typeof ROLES)[number];
 export const CAPABILITIES = [
   'knowledge.view',
   'knowledge.propose',
+  'interview.conduct',
   'assistant.use',
   'analytics.view',
   'content.view',
@@ -38,6 +39,7 @@ export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
   approver: [
     'knowledge.view',
     'knowledge.propose',
+    'interview.conduct',
     'assistant.use',
     'analytics.view',
     'content.view',
@@ -49,6 +51,7 @@ export const ROLE_CAPABILITIES: Record<Role, readonly Capability[]> = {
   contributor: [
     'knowledge.view',
     'knowledge.propose',
+    'interview.conduct',
     'assistant.use',
     'analytics.view',
     'content.view',

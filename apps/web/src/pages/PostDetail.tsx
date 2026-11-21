@@ -3,10 +3,18 @@ import { Link, useParams } from 'react-router';
 import { APPROVAL_EVENT_LABELS, AUDIENCE_LABELS, CHANNEL_LABELS, type PostDetail as Detail, type PostVersionView } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, Card, buttonClass, inputClass, secondaryButtonClass } from '../ui';
+import { PostPhoto } from './PostPhoto';
 import { StatusChip } from './Posts';
 
 const fmt = (iso: string) => new Date(iso).toLocaleString();
 export const shortPrint = (digest: string) => digest.slice(0, 12);
+
+/** ISO time to the value a datetime-local input expects, in the browser's time zone. */
+export function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 export function VersionBody({ v }: { v: PostVersionView }) {
   return (
@@ -14,6 +22,7 @@ export function VersionBody({ v }: { v: PostVersionView }) {
       <p className="text-xs text-stone-500">
         {CHANNEL_LABELS[v.channel]} · {AUDIENCE_LABELS[v.audience]}
         {v.angle && <> · {v.angle}</>}
+        {v.scheduledFor && <> · scheduled for {new Date(v.scheduledFor).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</>}
       </p>
       <p className="whitespace-pre-wrap rounded bg-stone-50 p-3 text-sm">{v.caption}</p>
       {v.photoPlan && (
@@ -54,6 +63,7 @@ export function PostDetail() {
   const [editing, setEditing] = useState(false);
   const [caption, setCaption] = useState('');
   const [photoPlan, setPhotoPlan] = useState('');
+  const [scheduledFor, setScheduledFor] = useState('');
   const [note, setNote] = useState('');
   const [confirmSelf, setConfirmSelf] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -75,7 +85,8 @@ export function PostDetail() {
   const latest = post.versions[0]!;
   const open = post.openApproval;
   const locked = post.status === 'posted' || post.status === 'archived';
-  const isSelf = !!open && (open.requestedBy.id === me.userId || latest.createdBy.id === me.userId);
+  // Same rule as the server: you count as "self" if you submitted it, started it, or wrote any version.
+  const isSelf = !!open && (open.requestedBy.id === me.userId || post.createdBy.id === me.userId || post.versions.some((v) => v.createdBy.id === me.userId));
 
   async function act(path: string, body: object, success: string) {
     setBusy(true);
@@ -128,13 +139,18 @@ export function PostDetail() {
               Photo plan
               <textarea className={`${inputClass} min-h-20`} value={photoPlan} onChange={(e) => setPhotoPlan(e.target.value)} maxLength={4000} />
             </label>
-            {open && <Alert kind="info">Saving creates a new version. The current {open.status === 'approved' ? 'approval' : 'approval request'} will no longer apply.</Alert>}
+            <label className="block text-sm font-medium">
+              When should it go out? (optional; your local time)
+              <input type="datetime-local" className={inputClass} value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+            </label>
+            {open &&<Alert kind="info">Saving creates a new version. The current {open.status === 'approved' ? 'approval' : 'approval request'} will no longer apply.</Alert>}
             <div className="flex gap-2">
               <button
                 className={buttonClass}
                 disabled={busy || !caption.trim()}
                 onClick={async () => {
-                  if (await act(`/api/posts/${post.id}/versions`, { caption, photoPlan }, 'Saved as a new version.')) setEditing(false);
+                  const body = { caption, photoPlan, scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : null };
+                  if (await act(`/api/posts/${post.id}/versions`, body, 'Saved as a new version.')) setEditing(false);
                 }}
               >
                 Save new version
@@ -147,8 +163,11 @@ export function PostDetail() {
         ) : (
           <>
             <VersionBody v={latest} />
+            <div className="mt-4">
+              <PostPhoto itemId={post.id} versionId={latest.id} sha256={latest.media?.sha256 ?? null} canEdit={!locked && can('content.draft')} approved={open?.status === 'approved'} onChanged={load} />
+            </div>
             <p className="mt-3 text-xs text-stone-500">
-              Written by {latest.createdBy.name} {latest.origin === 'ai_draft' ? '(from an assistant draft)' : ''} on {fmt(latest.createdAt)} · fingerprint{' '}
+              Written by {latest.createdBy.name} {latest.origin === 'ai_draft' ? '(from an assistant draft)' : ''} on {fmt(latest.createdAt)} · version fingerprint{' '}
               <code>{shortPrint(latest.digest)}</code>
             </p>
             {!locked && (
@@ -159,6 +178,7 @@ export function PostDetail() {
                     onClick={() => {
                       setCaption(latest.caption);
                       setPhotoPlan(latest.photoPlan);
+                      setScheduledFor(latest.scheduledFor ? toLocalInput(latest.scheduledFor) : '');
                       setEditing(true);
                     }}
                   >
@@ -190,7 +210,7 @@ export function PostDetail() {
       {open?.status === 'pending' && (
         <Card title="Waiting for approval">
           <p className="text-sm">
-            Submitted by {open.requestedBy.name} on {fmt(open.requestedAt)}. Approval will cover exactly version {open.version} (fingerprint <code>{shortPrint(open.digest)}</code>).
+            Submitted by {open.requestedBy.name} on {fmt(open.requestedAt)}. Approval will cover exactly version {open.version} (version fingerprint <code>{shortPrint(open.digest)}</code>).
           </p>
           {open.requestNote && <p className="mt-2 text-sm text-stone-600">Note: {open.requestNote}</p>}
 
@@ -292,21 +312,31 @@ export function PostDetail() {
       )}
 
       <Card title="History">
+        {/* Version saves and approval events in one timeline, oldest first. */}
         <ol className="space-y-1 text-sm">
-          {post.versions
-            .slice()
-            .reverse()
-            .map((v) => (
-              <li key={v.id} className="text-stone-600">
-                {fmt(v.createdAt)} · {v.createdBy.name} saved version {v.version} <code className="text-xs">{shortPrint(v.digest)}</code>
-              </li>
-            ))}
-          {post.activity.map((e) => (
-            <li key={e.id}>
-              {fmt(e.at)} · <span className="font-medium">{e.actor?.name ?? 'System'}</span> {APPROVAL_EVENT_LABELS[e.event] ?? e.event}
-              {e.note && <span className="text-stone-600">: {e.note}</span>}
-            </li>
-          ))}
+          {[
+            ...post.versions.map((v) => ({
+              key: v.id,
+              at: v.createdAt,
+              node: (
+                <li key={v.id} className="text-stone-600">
+                  {fmt(v.createdAt)} · {v.createdBy.name} saved version {v.version} <code className="text-xs">{shortPrint(v.digest)}</code>
+                </li>
+              ),
+            })),
+            ...post.activity.map((e) => ({
+              key: e.id,
+              at: e.at,
+              node: (
+                <li key={e.id}>
+                  {fmt(e.at)} · <span className="font-medium">{e.actor?.name ?? 'System'}</span> {APPROVAL_EVENT_LABELS[e.event] ?? e.event}
+                  {e.note && <span className="text-stone-600">: {e.note}</span>}
+                </li>
+              ),
+            })),
+          ]
+            .sort((a, b) => a.at.localeCompare(b.at))
+            .map((x) => x.node)}
         </ol>
         {post.versions.length > 1 && (
           <details className="mt-4">

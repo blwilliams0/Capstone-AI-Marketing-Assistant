@@ -39,6 +39,7 @@ function WriteYourOwn() {
   const { apiFetch } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState<CreatePostRequest>({ channel: 'instagram', audience: 'both', caption: '', angle: '' });
+  const [when, setWhen] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -46,7 +47,10 @@ function WriteYourOwn() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await apiFetch('/api/posts', { method: 'POST', body: { ...form, origin: 'human' } });
+    const res = await apiFetch('/api/posts', {
+      method: 'POST',
+      body: { ...form, origin: 'human', scheduledFor: when ? new Date(when).toISOString() : undefined },
+    });
     setBusy(false);
     if (res.ok) navigate(`/posts/${((await res.json()) as { itemId: string }).itemId}`);
     else setError(await readError(res));
@@ -83,6 +87,10 @@ function WriteYourOwn() {
       <label className="block text-sm font-medium">
         Post text
         <textarea className={`${inputClass} min-h-32`} required maxLength={10000} value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} />
+      </label>
+      <label className="block text-sm font-medium">
+        When should it go out? (optional; your local time)
+        <input type="datetime-local" className={inputClass} value={when} onChange={(e) => setWhen(e.target.value)} />
       </label>
       {error && <Alert kind="error">{error}</Alert>}
       <button className={buttonClass} disabled={busy}>

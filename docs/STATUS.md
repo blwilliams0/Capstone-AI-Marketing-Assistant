@@ -60,6 +60,47 @@ Last updated: 2026-11-18 (M3). The M3 summary below is newest; the 2026-11-13 mo
 - **Administrators can read staff assistant conversations.** Today conversations are private to the asker. Staff should be told plainly that management can read them before this is turned on.
 - **Controlled guardrails** on what the assistant will discuss or draft (scope to be defined with management: for example topic limits, banned claims, escalation to a manager).
 
+## M4 summary (2026-11-18, same branch, committed locally after the M3 push)
+
+**Built:**
+- **Brand interview in the app** (Interviews):
+  - the guide's 30 questions with the same IDs, and consent recorded at the start
+  - AI follow-up suggestions, or the guide's own follow-ups if the interviewee didn't agree to AI use
+  - "Draft brand rules" keeps only quotes found word for word in the answers, re-checks them on save, and flags disagreements between managers
+  - suggestions are saved only as **proposals** for an administrator to approve
+- **Calendar:** posts by scheduled date, plus fact expiry dates. Posts now have an optional date.
+- **Reminders** (in-app, with an unread badge): time to post, overdue, not submitted, waiting for approval, fact expiring or expired. Checked every few minutes; no email and no paid service.
+- **Photos:** attach a photo to a post; it's private, checked, fingerprinted and approved together with the text. It shows on Ready to post with a download link.
+- **Home screen:** "Needs you today" plus the five main tasks, and a **Photo guide**.
+
+**Verified:**
+- 214 tests pass.
+- A Fable security review of the interview and reminder code found no critical or high-severity issues; all fixes are applied (migration 008).
+- Migrations 006–008 are live; security check: 25 tables, all RLS, 0 public access.
+- The private photo bucket was checked live: public and anonymous access refused.
+
+**Not yet tried with the real AI:** interview follow-ups and rule drafting. A test would leave a permanent interview record, so the first real use is your interview with management. Estimated about 1 cent per follow-up and 15–30 cents to draft rules from a full interview.
+
+**Needs you:** nothing new to set up. Before the demo, optionally start a practice interview (with yourself, labelled "PRACTICE") to try the flow.
+
+## Reviews of 2026-11-21
+
+A Fable photo-upload review and a project-wide bug hunt found no demo blockers. All demo-relevant findings are fixed (TEST_LOG §13). Known risks to handle later:
+
+| Risk | When it bites | Plan |
+|---|---|---|
+| No `trust proxy`; rate limits and the reminder throttle live in memory | Hosting (M6) | Set `trust proxy` for the chosen host; move counters to Postgres if there is more than one instance |
+| Drafts (about 1 minute) and interview rule drafting (longer) run inside one web request | Hosts that cut requests at 30–100 seconds | Pick a host with a timeout of 5 minutes or more, or move long AI calls to background jobs |
+| Admin view of staff chats (requested) | When built | Show staff a notice and record it before admins can read chats; existing chats were made as private |
+| Failed or timed-out AI calls are logged as $0; budget month is UTC | KPIs (M5) | Add a "cost unknown" outcome; use Pacific time for the month |
+| Post lists capped at 200 and the calendar at 300 | Exports and KPIs (M5), after months of use | Paging and filters; exports must not reuse the capped lists |
+| Restaurant time zone is used only in reminder wording | CSV import (M5) | One shared time-zone constant for scheduling, the calendar and imports |
+| Supabase free tier pauses after about 7 idle days; no point-in-time restore | Before handoff | Dec 1 decision gate: plan and backups; run a restore test (M6) |
+| Job, notification and history tables only grow | Months of use | Retention for job and notification rows (approval history stays forever) |
+| Two API instances starting together would both migrate | Multiple instances | Advisory lock in the migration runner |
+| No automated tests for the web screens | Ongoing | Playwright journey test (M6) |
+| Demo and practice data are permanent | Now | Name them "DEMO…" and "PRACTICE…": the AI ignores those posts' history and those interviews |
+
 ## M3 summary (2026-11-18, branch `m3-approve-and-post`, not pushed)
 
 **Built:**

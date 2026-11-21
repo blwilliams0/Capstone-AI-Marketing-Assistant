@@ -8,6 +8,7 @@ import type { AuthAdmin } from '../auth/auth-admin.js';
 import { createSupabaseAuthenticator } from '../auth/authenticator.js';
 import { createJwtVerifier } from '../auth/tokens.js';
 import type { AiProvider } from '../ai/provider.js';
+import type { MediaStore } from '../media/store.js';
 
 export const ISSUER = 'https://test-project.supabase.co/auth/v1';
 export const AUDIENCE = 'authenticated';
@@ -38,7 +39,7 @@ export interface SignOverrides {
 }
 
 export async function createHarness(
-  opts: { withAuthAdmin?: boolean; ai?: AiProvider | null; aiBudgetUsd?: number; rateLimits?: AppDeps['rateLimits'] } = {},
+  opts: { withAuthAdmin?: boolean; ai?: AiProvider | null; aiBudgetUsd?: number; rateLimits?: AppDeps['rateLimits']; media?: MediaStore } = {},
 ): Promise<Harness> {
   const withAuthAdmin = opts.withAuthAdmin ?? true;
   const db = await createTestDb();
@@ -65,6 +66,7 @@ export async function createHarness(
     ai: opts.ai ?? null,
     aiBudgetUsd: opts.aiBudgetUsd,
     rateLimits: opts.rateLimits,
+    media: opts.media,
   });
 
   const [restaurant] = await db.query<{ id: string }>(`INSERT INTO restaurants (name) VALUES ('Test Restaurant') RETURNING id`);
