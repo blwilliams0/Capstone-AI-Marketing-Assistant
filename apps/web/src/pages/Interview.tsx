@@ -319,7 +319,22 @@ function TranscriptCard({ detail, onFilled }: { detail: InterviewSessionDetail; 
               Upload or paste a transcript (for example from Zoom, Teams, Otter or a phone recording app). The assistant puts the manager&apos;s own words under each question. It can
               only copy words that are really in the transcript; it never writes answers. Check each answer afterwards.
             </p>
-            <input type="file" accept=".txt,.md,.vtt,.srt,text/plain" onChange={(e) => e.target.files?.[0] && void pickFile(e.target.files[0])} className="text-sm" />
+            <div className="flex flex-wrap items-center gap-3">
+              <label className={`${secondaryButtonClass} cursor-pointer`}>
+                Choose a transcript file
+                <input
+                  type="file"
+                  accept=".txt,.md,.vtt,.srt,.doc,.docx,text/plain"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void pickFile(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              <span className="text-sm text-stone-600">{fileName ? `Loaded: ${fileName}` : 'Text files: .txt, .vtt, .srt or .md'}</span>
+            </div>
             <textarea
               className={`${inputClass} min-h-32 text-sm`}
               placeholder="…or paste the transcript here"
@@ -336,9 +351,12 @@ function TranscriptCard({ detail, onFilled }: { detail: InterviewSessionDetail; 
               Also replace answers someone already typed (otherwise typed answers are kept)
             </label>
             {error && <Alert kind="error">{error}</Alert>}
-            <button className={buttonClass} disabled={busy || text.trim().length < 20} onClick={() => void fill()}>
-              {busy ? 'Reading the transcript… (up to a few minutes)' : 'Fill in the answers from this transcript'}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button className={buttonClass} disabled={busy || text.trim().length < 20} onClick={() => void fill()}>
+                {busy ? 'Reading the transcript… (up to a few minutes)' : 'Fill in the answers from this transcript'}
+              </button>
+              {!busy && text.trim().length < 20 && <span className="text-sm text-stone-500">Choose a file or paste the transcript first.</span>}
+            </div>
           </>
         )}
         {result && (
