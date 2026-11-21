@@ -89,22 +89,30 @@ export function createClaudeAiProvider(client: ClaudeClient): AiProvider {
     },
 
     async structured<T>(req: StructuredRequest<T>) {
-      const response = await client.beta.messages.parse({
-        model: CLAUDE_MODEL,
-        max_tokens: 8000,
-        betas: [FALLBACK_BETA],
-        fallbacks: 'default',
-        inference_geo: 'us',
-        output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
-        system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content: [...toDocumentBlocks(req.documents, false), { type: 'text', text: req.prompt }] }],
-      });
+      // Long jobs (rule drafting from a whole interview) get more output room and more time, but
+      // fewer retries, so a person is never left waiting many minutes.
+      const long = (req.maxTokens ?? 8000) > 8000;
+      const response = await client.beta.messages.parse(
+        {
+          model: CLAUDE_MODEL,
+          max_tokens: req.maxTokens ?? 8000,
+          betas: [FALLBACK_BETA],
+          fallbacks: 'default',
+          inference_geo: 'us',
+          output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
+          system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
+          messages: [{ role: 'user', content: [...toDocumentBlocks(req.documents, false), { type: 'text', text: req.prompt }] }],
+        },
+        long ? { timeout: 300_000, maxRetries: 1 } : undefined,
+      );
       const refused = response.stop_reason === 'refusal';
+      const truncated = response.stop_reason === 'max_tokens';
       return {
-        data: refused ? null : ((response.parsed_output as T | null) ?? null),
+        data: refused || truncated ? null : ((response.parsed_output as T | null) ?? null),
         usage: usageOf(response.usage),
         model: response.model,
         refused,
+        truncated,
       };
     },
   };

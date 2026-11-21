@@ -37,7 +37,7 @@ function ReadyCard({ card, onDone }: { card: ReadyToPostCard; onDone: (msg: stri
       <div className="space-y-4">
         <p className="text-sm text-stone-600">
           Approved by {card.approvedBy.name}
-          {card.selfApproved && ' (their own post)'} on {new Date(card.approvedAt).toLocaleString()} · fingerprint <code>{shortPrint(card.digest)}</code> ·{' '}
+          {card.selfApproved && ' (their own post)'} on {new Date(card.approvedAt).toLocaleString()} · version fingerprint <code>{shortPrint(card.digest)}</code> ·{' '}
           <Link to={`/posts/${card.itemId}`} className="underline">
             details
           </Link>

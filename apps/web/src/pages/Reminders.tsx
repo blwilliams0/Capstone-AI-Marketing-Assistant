@@ -11,7 +11,10 @@ export function Reminders() {
 
   const load = useCallback(async () => {
     const res = await apiFetch('/api/notifications');
-    if (res.ok) setData((await res.json()) as NotificationsResponse);
+    if (res.ok) {
+      setData((await res.json()) as NotificationsResponse);
+      window.dispatchEvent(new Event('reminders-changed'));
+    }
     else setError(await readError(res));
   }, [apiFetch]);
 

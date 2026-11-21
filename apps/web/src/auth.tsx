@@ -71,40 +71,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
   // A ref, not state: loadMe must always see the current value, not the one from its closure.
   const needsPassword = useRef(arrivedToSetPassword && !__MOCK_AUTH__);
+  const meRef = useRef<MeResponse | null>(null);
 
   const apiFetch = useCallback(async (path: string, init?: { method?: string; body?: unknown }) => {
     const token = await currentToken();
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
     if (init?.body !== undefined) headers['Content-Type'] = 'application/json';
-    return fetch(`${__API_URL__}${path}`, {
-      method: init?.method ?? 'GET',
-      headers,
-      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
-    });
+    try {
+      return await fetch(`${__API_URL__}${path}`, {
+        method: init?.method ?? 'GET',
+        headers,
+        body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+      });
+    } catch {
+      // Network failure (server stopped, Wi-Fi dropped): answer like an error response, so every
+      // page shows a message instead of a button stuck on "Saving…".
+      return new Response(JSON.stringify({ error: 'Cannot reach the server. Check the connection and try again.', reason: 'network' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }, []);
 
   const loadMe = useCallback(async () => {
     const token = await currentToken();
     if (!token) {
       setMe(null);
+      meRef.current = null;
       setStatus('signed_out');
       return;
     }
     try {
       const res = await apiFetch('/api/me');
       if (res.ok) {
-        setMe((await res.json()) as MeResponse);
+        const loaded = (await res.json()) as MeResponse;
+        meRef.current = loaded;
+        setMe(loaded);
         setStatus(needsPassword.current ? 'needs_password' : 'ready');
       } else if (res.status === 403) {
         setMe(null);
+        meRef.current = null;
         setMessage(((await res.json()) as { error: string }).error);
         setStatus('no_access');
-      } else {
+      } else if (res.status === 401) {
         setMe(null);
+        meRef.current = null;
         setStatus('signed_out');
+      } else if (!meRef.current) {
+        // A passing problem (busy server, too many requests) before the first load.
+        setMessage('Cannot reach the server right now. Please try again in a moment.');
+        setStatus('error');
       }
+      // Otherwise keep the current session: a passing problem must not sign people out or lose edits.
     } catch {
+      if (meRef.current) return;
       setMessage('Cannot reach the server. Please try again in a moment.');
       setStatus('error');
     }
@@ -163,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem(MOCK_KEY);
         if (supabase) await supabase.auth.signOut();
         setMe(null);
+        meRef.current = null;
         setMessage(null);
         setStatus('signed_out');
       },

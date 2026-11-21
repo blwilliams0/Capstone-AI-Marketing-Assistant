@@ -12,7 +12,7 @@ export const createPostSchema = z.object({
   photoPlan: optionalText(4000),
   scheduledFor: z.string().datetime({ offset: true }).optional(),
   /** Approved knowledge versions the text relies on (from an AI draft's sources). */
-  sourceVersionIds: z.array(z.string().uuid()).max(20).default([]),
+  sourceVersionIds: z.array(z.string().uuid()).max(50).default([]),
   origin: z.enum(['human', 'ai_draft']).default('human'),
 });
 export type CreatePostRequest = z.input<typeof createPostSchema>;

@@ -216,7 +216,9 @@ export async function suggestFollowUp(deps: AiDeps, actor: AuthContext, sessionI
   if (!next) return 'too_many';
 
   if (!s.ai_consent || !deps.ai) {
-    return { followUp: q.followUp ?? 'Can you give an example?', questionId: next, source: 'guide' };
+    // The guide has one follow-up per question; after that, ask for an example instead of repeating it.
+    const guideText = next === `${base}.f1` && q.followUp ? q.followUp : 'Can you give a concrete example?';
+    return { followUp: guideText, questionId: next, source: 'guide' };
   }
   const ai = await guard(deps, actor, 'interview');
   const transcript = answers.map((a) => `Q: ${oneLine(a.questionText)}\nA: ${a.answer.replace(/[<>]/g, '')}`).join('\n\n');
@@ -346,7 +348,7 @@ export async function extractProposals(deps: AiDeps, actor: AuthContext, session
     `SELECT s.interviewee_name AS name, a.question_id, a.answer FROM (
        SELECT DISTINCT ON (session_id, question_id) session_id, question_id, answer FROM interview_answers
         WHERE restaurant_id = $1 AND session_id <> $2 ORDER BY session_id, question_id, seq DESC) a
-       JOIN interview_sessions s ON s.id = a.session_id AND s.ai_consent
+       JOIN interview_sessions s ON s.id = a.session_id AND s.ai_consent AND s.interviewee_name NOT ILIKE 'practice%'
       WHERE btrim(a.answer) <> '' AND a.question_id = ANY($3::text[])
       ORDER BY a.question_id, s.interviewee_name`,
     [actor.restaurantId, sessionId, answers.map((a) => a.questionId)],
@@ -374,6 +376,7 @@ export async function extractProposals(deps: AiDeps, actor: AuthContext, session
       prompt,
       schema: extractionOutput,
       effort: 'high',
+      maxTokens: 16000,
       mock: () => mockExtraction(answers),
     }),
   );
@@ -388,7 +391,17 @@ export async function extractProposals(deps: AiDeps, actor: AuthContext, session
   });
   const checked = res.data
     ? checkExtraction(res.data, answers, docs)
-    : { proposals: [], openQuestions: [], warnings: [res.refused ? "The assistant can't help with that request." : 'The assistant returned an unreadable result. Please try again.'] };
+    : {
+        proposals: [],
+        openQuestions: [],
+        warnings: [
+          res.refused
+            ? "The assistant can't help with that request."
+            : res.truncated
+              ? 'The answer was cut off because there was a lot to cover. Try once more; if it happens again, draft the rules by hand in Knowledge for now.'
+              : 'The assistant returned an unreadable result. Please try again.',
+        ],
+      };
   const result = { ...checked, provider: ai.name };
 
   let row: { id: string; created_at: Date | string } | undefined;

@@ -196,7 +196,7 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
   });
 
   addKnowledgeRoutes(r, db);
-  addContentRoutes(r, db);
+  addContentRoutes(r, db, deps.media);
   addCalendarRoutes(r, db);
   addMediaRoutes(r, db, deps.media);
   addInterviewRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);

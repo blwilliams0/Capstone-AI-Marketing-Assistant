@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import {
   INTERVIEW_QUESTIONS,
@@ -32,7 +32,13 @@ function AnswerBox({
   const { apiFetch } = useAuth();
   const [text, setText] = useState(saved);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  useEffect(() => setText(saved), [saved]);
+  // Take the server's text only if the box still shows the previous saved text: never overwrite
+  // words typed while a save was on its way.
+  const lastSaved = useRef(saved);
+  useEffect(() => {
+    setText((t) => (t === lastSaved.current ? saved : t));
+    lastSaved.current = saved;
+  }, [saved]);
   const dirty = text !== saved;
 
   async function save() {

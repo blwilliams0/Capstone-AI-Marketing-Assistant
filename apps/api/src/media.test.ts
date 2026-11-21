@@ -12,11 +12,16 @@ const store: MediaStore = {
     links.push(path);
     return { path, token: `token-for-${path}` };
   },
-  async download(path) {
-    return objects.get(path) ?? null;
+  async download(path, maxBytes) {
+    const b = objects.get(path);
+    if (!b) return null;
+    return b.length > maxBytes ? 'too_large' : b;
   },
-  async viewLink(path, seconds) {
-    return `https://storage.test/${path}?expires=${seconds}`;
+  async viewLink(path, seconds, o = {}) {
+    return `https://storage.test/${path}?expires=${seconds}${o.download ? '&download' : ''}`;
+  },
+  async remove(path) {
+    objects.delete(path);
   },
 };
 
@@ -84,9 +89,30 @@ describe('photo upload', () => {
     expect(view.body.url).toMatch(/expires=300/);
     expect((await as(outsider).get(`/api/posts/${id}/media?versionId=${d.versions[0].id}`)).status).toBe(404);
 
+    expect((await as(viewer).get(`/api/posts/${id}/media?versionId=${d.versions[0].id}&download=1`)).body.url).toMatch(/&download$/);
+
     const removed = await as(contributor).post(`/api/posts/${id}/media/remove`);
     expect(removed.status).toBe(201);
     expect((await as(viewer).get(`/api/posts/${id}`)).body.versions[0].media).toBeNull();
+    // Removing again does nothing (no new version, so no approval is cancelled).
+    expect((await as(contributor).post(`/api/posts/${id}/media/remove`)).body.reason).toBe('no_photo');
+  });
+
+  it('blocks approval and posting if the stored photo no longer matches its fingerprint', async () => {
+    const id = await newPost();
+    const path = await upload(id, JPEG);
+    await as(contributor).post(`/api/posts/${id}/media`, { path });
+    const sub = await as(contributor).post(`/api/posts/${id}/submit`);
+
+    objects.set(path, PNG); // changed behind the app's back
+    expect((await as(approver).post(`/api/approvals/${sub.body.approvalId}/approve`)).body.reason).toBe('photo_changed');
+
+    objects.set(path, JPEG); // restored: approval goes through
+    expect((await as(approver).post(`/api/approvals/${sub.body.approvalId}/approve`)).status).toBe(200);
+
+    objects.delete(path); // removed before posting
+    const posted = await as(contributor).post(`/api/approvals/${sub.body.approvalId}/posted`, { digest: sub.body.digest });
+    expect(posted.body.reason).toBe('photo_changed');
   });
 
   it('refuses paths from another post, files not uploaded, non-images, and mismatched types', async () => {
@@ -101,6 +127,7 @@ describe('photo upload', () => {
 
     const script = await upload(id, new TextEncoder().encode('<script>alert(1)</script>'));
     expect((await as(contributor).post(`/api/posts/${id}/media`, { path: script })).body.reason).toBe('not_an_image');
+    expect(objects.has(script)).toBe(false); // rejected files are deleted
 
     const pngAsJpeg = await upload(id, PNG, 'image/jpeg');
     expect((await as(contributor).post(`/api/posts/${id}/media`, { path: pngAsJpeg })).body.reason).toBe('not_an_image');

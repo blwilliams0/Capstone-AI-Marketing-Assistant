@@ -85,7 +85,8 @@ export function PostDetail() {
   const latest = post.versions[0]!;
   const open = post.openApproval;
   const locked = post.status === 'posted' || post.status === 'archived';
-  const isSelf = !!open && (open.requestedBy.id === me.userId || latest.createdBy.id === me.userId);
+  // Same rule as the server: you count as "self" if you submitted it, started it, or wrote any version.
+  const isSelf = !!open && (open.requestedBy.id === me.userId || post.createdBy.id === me.userId || post.versions.some((v) => v.createdBy.id === me.userId));
 
   async function act(path: string, body: object, success: string) {
     setBusy(true);
@@ -166,7 +167,7 @@ export function PostDetail() {
               <PostPhoto itemId={post.id} versionId={latest.id} sha256={latest.media?.sha256 ?? null} canEdit={!locked && can('content.draft')} approved={open?.status === 'approved'} onChanged={load} />
             </div>
             <p className="mt-3 text-xs text-stone-500">
-              Written by {latest.createdBy.name} {latest.origin === 'ai_draft' ? '(from an assistant draft)' : ''} on {fmt(latest.createdAt)} · fingerprint{' '}
+              Written by {latest.createdBy.name} {latest.origin === 'ai_draft' ? '(from an assistant draft)' : ''} on {fmt(latest.createdAt)} · version fingerprint{' '}
               <code>{shortPrint(latest.digest)}</code>
             </p>
             {!locked && (
@@ -209,7 +210,7 @@ export function PostDetail() {
       {open?.status === 'pending' && (
         <Card title="Waiting for approval">
           <p className="text-sm">
-            Submitted by {open.requestedBy.name} on {fmt(open.requestedAt)}. Approval will cover exactly version {open.version} (fingerprint <code>{shortPrint(open.digest)}</code>).
+            Submitted by {open.requestedBy.name} on {fmt(open.requestedAt)}. Approval will cover exactly version {open.version} (version fingerprint <code>{shortPrint(open.digest)}</code>).
           </p>
           {open.requestNote && <p className="mt-2 text-sm text-stone-600">Note: {open.requestNote}</p>}
 
@@ -311,21 +312,31 @@ export function PostDetail() {
       )}
 
       <Card title="History">
+        {/* Version saves and approval events in one timeline, oldest first. */}
         <ol className="space-y-1 text-sm">
-          {post.versions
-            .slice()
-            .reverse()
-            .map((v) => (
-              <li key={v.id} className="text-stone-600">
-                {fmt(v.createdAt)} · {v.createdBy.name} saved version {v.version} <code className="text-xs">{shortPrint(v.digest)}</code>
-              </li>
-            ))}
-          {post.activity.map((e) => (
-            <li key={e.id}>
-              {fmt(e.at)} · <span className="font-medium">{e.actor?.name ?? 'System'}</span> {APPROVAL_EVENT_LABELS[e.event] ?? e.event}
-              {e.note && <span className="text-stone-600">: {e.note}</span>}
-            </li>
-          ))}
+          {[
+            ...post.versions.map((v) => ({
+              key: v.id,
+              at: v.createdAt,
+              node: (
+                <li key={v.id} className="text-stone-600">
+                  {fmt(v.createdAt)} · {v.createdBy.name} saved version {v.version} <code className="text-xs">{shortPrint(v.digest)}</code>
+                </li>
+              ),
+            })),
+            ...post.activity.map((e) => ({
+              key: e.id,
+              at: e.at,
+              node: (
+                <li key={e.id}>
+                  {fmt(e.at)} · <span className="font-medium">{e.actor?.name ?? 'System'}</span> {APPROVAL_EVENT_LABELS[e.event] ?? e.event}
+                  {e.note && <span className="text-stone-600">: {e.note}</span>}
+                </li>
+              ),
+            })),
+          ]
+            .sort((a, b) => a.at.localeCompare(b.at))
+            .map((x) => x.node)}
         </ol>
         {post.versions.length > 1 && (
           <details className="mt-4">

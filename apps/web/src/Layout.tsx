@@ -39,9 +39,12 @@ function useUnreadReminders(): number {
         .catch(() => {});
     void check();
     const timer = setInterval(check, 2 * 60 * 1000);
+    // The Reminders page announces changes (marked read) so the badge updates at once.
+    window.addEventListener('reminders-changed', check);
     return () => {
       alive = false;
       clearInterval(timer);
+      window.removeEventListener('reminders-changed', check);
     };
   }, [me, apiFetch, pathname]);
   return unread;

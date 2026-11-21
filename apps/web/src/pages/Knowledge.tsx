@@ -7,6 +7,7 @@ import {
   type KnowledgeVersionView,
 } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
+import { toLocalInput } from './PostDetail';
 import { Alert, Card, buttonClass, inputClass, secondaryButtonClass } from '../ui';
 
 interface BrandCore {
@@ -203,9 +204,16 @@ function AddForm({ initialKind, onSubmit }: { initialKind: KnowledgeKind; onSubm
 }
 
 function VersionText({ v }: { v: KnowledgeVersionView }) {
+  const [full, setFull] = useState(false);
+  const long = v.body.length > 1200;
   return (
     <div className="space-y-1">
-      <p className="whitespace-pre-wrap text-sm">{v.body.length > 1200 ? `${v.body.slice(0, 1200)}…` : v.body}</p>
+      <p className="whitespace-pre-wrap text-sm">{long && !full ? `${v.body.slice(0, 1200)}…` : v.body}</p>
+      {long && (
+        <button className="text-xs underline" onClick={() => setFull((f) => !f)}>
+          {full ? 'Show less' : `Show the full text (${v.body.length.toLocaleString()} characters) before approving`}
+        </button>
+      )}
       <p className="text-xs text-stone-500">
         Version {v.version} · {ORIGIN_LABELS[v.origin]} · proposed by {v.proposedBy.name} {fmt(v.proposedAt)}
         {v.decidedBy && v.status !== 'proposed' && ` · approved by ${v.decidedBy.name} ${fmt(v.decidedAt!)}`}
@@ -231,6 +239,16 @@ function ItemCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.current?.body ?? '');
+  const [sourceNote, setSourceNote] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
+  /** Opens the edit box filled from the CURRENT approved version (not stale text from earlier). */
+  const startEditing = () => {
+    const cur = item.current;
+    setDraft(cur?.body ?? '');
+    setSourceNote(cur?.sourceNote ?? '');
+    setExpiresAt(cur?.expiresAt && !cur.expired ? toLocalInput(cur.expiresAt) : '');
+    setEditing(true);
+  };
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
@@ -286,7 +304,7 @@ function ItemCard({
       {!item.retired && (canPropose || canApprove) && (
         <div className="mt-4 flex flex-wrap gap-2">
           {canPropose && (
-            <button className={secondaryButtonClass} onClick={() => setEditing(!editing)}>
+            <button className={secondaryButtonClass} onClick={() => (editing ? setEditing(false) : startEditing())}>
               {editing ? 'Cancel' : 'Propose a change'}
             </button>
           )}
@@ -317,13 +335,25 @@ function ItemCard({
       {editing && (
         <div className="mt-3 space-y-2">
           <textarea className={`${inputClass} min-h-32 text-sm`} value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <label className="block text-sm font-medium">
+            Source (who confirmed it, and when)
+            <input className={inputClass} maxLength={500} value={sourceNote} onChange={(e) => setSourceNote(e.target.value)} />
+          </label>
+          {item.kind === 'fact' && (
+            <label className="block text-sm font-medium">
+              Stop using it after (optional)
+              <input type="datetime-local" className={inputClass} value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+            </label>
+          )}
           <button
             className={buttonClass}
             disabled={!draft.trim()}
             onClick={() =>
-              void act(`/api/knowledge/${item.id}/versions`, { body: draft }, 'Proposed. The current approved version stays in use until this is approved.').then(
-                (ok) => ok && setEditing(false),
-              )
+              void act(
+                `/api/knowledge/${item.id}/versions`,
+                { body: draft, sourceNote: sourceNote.trim() || undefined, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined },
+                'Proposed. The current approved version stays in use until this is approved.',
+              ).then((ok) => ok && setEditing(false))
             }
           >
             Save proposal

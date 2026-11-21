@@ -38,7 +38,7 @@ export function Activity() {
       <div>
         <h1 className="text-2xl font-semibold">Activity</h1>
         <p className="text-sm text-stone-600">
-          Who submitted, approved and posted what, and when. This history cannot be edited or deleted. Each entry shows the fingerprint of the exact text involved.
+          Who submitted, approved and posted what, and when. This history cannot be edited or deleted. Each entry shows the fingerprint of the exact version (text, date and photo) involved.
         </p>
       </div>
       {error && <Alert kind="error">{error}</Alert>}

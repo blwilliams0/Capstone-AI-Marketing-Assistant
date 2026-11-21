@@ -4,6 +4,7 @@ import type { Db } from '@the-pocket/db';
 import { approvePostSchema, createPostSchema, decisionNoteSchema, editPostSchema, markPostedSchema, submitPostSchema } from '@the-pocket/shared';
 import { badRequest } from '../knowledge/routes.js';
 import type { PolicyRouter } from '../policy.js';
+import { checkStoredPhoto, type MediaStore } from '../media/store.js';
 import {
   archivePost,
   createPost,
@@ -52,7 +53,29 @@ const POSTED: Record<MarkPostedOutcome, [number, string]> = {
   archived: [409, 'This post has been archived.'],
 };
 
-export function addContentRoutes(r: PolicyRouter, db: Db) {
+export function addContentRoutes(r: PolicyRouter, db: Db, media?: MediaStore) {
+  /**
+   * Before approving or recording a post with a photo: the stored file must still have the
+   * fingerprint that was recorded. Sends the error response and returns false when it does not.
+   */
+  async function photoStillMatches(res: Response, approvalId: string, restaurantId: string): Promise<boolean> {
+    const [v] = await db.query<{ media_path: string | null; media_sha256: string | null }>(
+      `SELECT v.media_path, v.media_sha256 FROM approval_requests a JOIN content_versions v ON v.id = a.content_version_id
+        WHERE a.id = $1 AND a.restaurant_id = $2`,
+      [approvalId, restaurantId],
+    );
+    const check = await checkStoredPhoto(media, v?.media_path ?? null, v?.media_sha256 ?? null);
+    if (check === 'storage_off') {
+      fail(res, 503, 'Photo storage is not set up, so the photo cannot be checked.', 'media_disabled');
+      return false;
+    }
+    if (check === 'changed') {
+      fail(res, 409, 'The stored photo no longer matches the one that was added to this post. Add the photo again; the post will need approval again.', 'photo_changed');
+      return false;
+    }
+    return true;
+  }
+
   r.get('/posts', 'content.view', async (req, res) => {
     const q = listQuery.safeParse(req.query);
     if (!q.success) return badRequest(res, q.error);
@@ -126,6 +149,7 @@ export function addContentRoutes(r: PolicyRouter, db: Db) {
     if (!p.success) return badRequest(res, p.error);
     const b = decision === 'approve' ? approvePostSchema.safeParse(req.body ?? {}) : decisionNoteSchema.safeParse(req.body ?? {});
     if (!b.success) return badRequest(res, b.error);
+    if (decision === 'approve' && !(await photoStillMatches(res, p.data.approvalId, req.auth!.restaurantId))) return;
     const outcome = await decidePost(db, req.auth!, p.data.approvalId, decision, b.data, req.requestId);
     const [status, message] = DECISION[outcome];
     send(res, status, status < 400 ? { status: outcome, message } : { error: message, reason: outcome });
@@ -149,6 +173,7 @@ export function addContentRoutes(r: PolicyRouter, db: Db) {
     if (!p.success) return badRequest(res, p.error);
     const b = markPostedSchema.safeParse(req.body ?? {});
     if (!b.success) return badRequest(res, b.error);
+    if (!(await photoStillMatches(res, p.data.approvalId, req.auth!.restaurantId))) return;
     const outcome = await markPosted(db, req.auth!, p.data.approvalId, b.data, req.requestId);
     const [status, message] = POSTED[outcome];
     send(res, status, status < 400 ? { status: outcome, message } : { error: message, reason: outcome });

@@ -26,6 +26,7 @@ export function Draft() {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
+  const [postName, setPostName] = useState('');
   const navigate = useNavigate();
 
   async function save(i: number) {
@@ -36,10 +37,10 @@ export function Draft() {
     const res = await apiFetch('/api/posts', {
       method: 'POST',
       body: {
-        title: o.angle || undefined,
+        title: (postName.trim() || o.angle || o.caption.split('\n')[0] || 'Untitled post').slice(0, 200),
         channel: form.channel,
         audience: form.audience,
-        angle: o.angle || undefined,
+        angle: o.angle ? o.angle.slice(0, 300) : undefined,
         caption: o.caption.slice(0, 10000),
         photoPlan: result.photoTips.join('\n').slice(0, 4000) || undefined,
         sourceVersionIds: o.sources.map((s) => s.versionId),
@@ -133,6 +134,12 @@ export function Draft() {
               {w}
             </Alert>
           ))}
+          {result.options.length > 0 && (
+            <label className="block text-sm font-medium">
+              Name for the post you save (optional; posts can&apos;t be renamed later)
+              <input className={inputClass} maxLength={200} placeholder="e.g. DEMO – Weeknight patio" value={postName} onChange={(e) => setPostName(e.target.value)} />
+            </label>
+          )}
           {result.options.map((o, i) => (
             <Card key={i} title={`Option ${i + 1}${o.angle ? `: ${o.angle}` : ''}`}>
               <p className="whitespace-pre-wrap rounded bg-stone-50 p-3 text-sm">{o.caption}</p>

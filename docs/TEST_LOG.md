@@ -360,3 +360,34 @@ A Fable-model review of the M4 diff found no critical or high-severity issues. A
 - reusing the link to overwrite: **refused**
 - anonymous download: **refused**; anonymous listing sees 0 files; public URL: **400**
 - signed view link: 200
+
+## 13. Photo review and project-wide bug hunt fixes (2026-11-21)
+
+Two Fable-model reviews (photo upload security; whole-project bug hunt plus plan risks). Neither found a critical issue or a blocker on the scripted demo path. Fixed:
+
+**Photos**
+- The stored photo's fingerprint is re-checked before approval and before "I posted it" (409 `photo_changed`).
+- Rejected uploads are deleted; size is checked before reading a file into memory.
+- Upload routes have their own limit (60 per person per 10 minutes).
+- "Remove photo" with no photo does nothing instead of cancelling an approval.
+- The bucket is confirmed private at every API start.
+- Real download links; image links refresh after expiry; clearer "version fingerprint" and "photo file ID" labels.
+
+**Demo-relevant**
+- A dropped database connection no longer crashes the API (pool error handler, connect timeout).
+- The screen's "your own post" rule now matches the server (creator, any version's author, or requester).
+- A passing server problem (429, 500, network) no longer signs people out; only a 401 does.
+- Network failures show a message instead of leaving buttons stuck on "Saving…".
+- "Save as a post" caps the title (200) and angle; up to 50 sources; optional post name such as "DEMO – …".
+- Interview notes typed while a save is in flight are no longer overwritten.
+- Knowledge: full text can be expanded before approving; "Propose a change" keeps the source and can set a new expiry; the edit box starts from the current version.
+- Post History shows saves and approval events in time order; the reminder badge updates as soon as reminders are read; guide follow-ups no longer repeat.
+- Interview rule drafting: 16,000-token output limit, 5-minute timeout with one retry, and a clear message if the answer is cut off.
+
+**Data hygiene and integrity**
+- Posts titled "DEMO…" are kept but never sent to the AI as recent history; interviews named "PRACTICE…" are left out of the comparison between managers.
+- Migration 009: the database itself refuses knowledge approval or rejection by anyone but an active administrator; two indexes on approval requests.
+
+**Results:** 216 tests passing (shared 7, db 63, api 137, worker 9). Live: migration 009 applied; 25 tables with RLS; 0 public access.
+
+**Deferred (recorded in STATUS):** `trust proxy`, and moving rate limits into the database (deployment, M6); long AI calls as background jobs if the host cuts requests short; admin view of staff chats needs a notice and consent design first; KPI "cost unknown" for failed AI calls (M5); paging instead of the 200 and 300 caps (M5); one shared restaurant time zone; Supabase free-tier pausing and backups (Dec 1 gate); growth of job and notification history; a migration lock for multiple instances; web UI tests (M6 Playwright).

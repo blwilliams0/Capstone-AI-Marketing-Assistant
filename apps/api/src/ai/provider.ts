@@ -45,6 +45,8 @@ export interface StructuredRequest<T> {
   prompt: string;
   schema: z.ZodType<T>;
   effort: Effort;
+  /** Output limit including thinking. Default 8000; long jobs ask for more. */
+  maxTokens?: number;
   /** Used only by the mock provider (tests and local development without an API key). */
   mock: () => T;
 }
@@ -54,6 +56,8 @@ export interface StructuredResult<T> {
   usage: AiUsage;
   model: string;
   refused: boolean;
+  /** The answer hit the output limit and was cut off (data is null). */
+  truncated?: boolean;
 }
 
 /**

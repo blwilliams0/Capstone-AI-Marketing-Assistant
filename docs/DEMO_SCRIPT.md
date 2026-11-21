@@ -8,7 +8,7 @@ About 10 minutes. The story: **management controls the brand; the AI helps staff
 2. **Second account.** As admin, go to Staff and invite a second email you own as a **contributor** (for example a school address). Accept the invite and set a password. In the demo, this person plays a staff member, in a private browser window.
 3. **Approve a couple of real facts**, if management can confirm them: a current dish, the patio hours, the booking method. These remove the `[brackets]` from drafts and make the AI's output much more specific. Add them under Knowledge → Verified facts.
 4. **Rehearse once, end to end**, and keep that rehearsal post saved. If the AI or Wi-Fi is slow on the day, you can show the saved one instead of waiting.
-5. **Name demo posts clearly**, starting with "DEMO –". History is permanent by design (nothing can be deleted), and posts from the last 6 months are shown to the AI so it avoids repeating them. Clear names keep the record honest.
+5. **Name demo posts "DEMO – …"** (there is a name box above the options on Create a post). History is permanent by design, and the AI ignores posts named DEMO when it checks for repeats. Name practice interviews "PRACTICE …" for the same reason.
 
 Cost: a question is about 4 cents and a draft about 8 cents.
 

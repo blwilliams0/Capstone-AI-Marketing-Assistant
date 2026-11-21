@@ -30,6 +30,8 @@ export function PostPhoto({
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
+  // Links last 5 minutes; `refresh` asks for a new one (e.g. when the image fails after expiry).
+  const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     setUrl(null);
     if (!sha256) return;
@@ -42,7 +44,13 @@ export function PostPhoto({
     return () => {
       alive = false;
     };
-  }, [apiFetch, itemId, versionId, sha256]);
+  }, [apiFetch, itemId, versionId, sha256, refresh]);
+
+  async function downloadPhoto() {
+    const res = await apiFetch(`/api/posts/${itemId}/media?versionId=${versionId}&download=1`);
+    if (res.ok) window.location.assign(((await res.json()) as { url: string }).url);
+    else setError(await readError(res));
+  }
 
   async function upload(file: File) {
     setError(null);
@@ -81,7 +89,7 @@ export function PostPhoto({
       {sha256 ? (
         url ? (
           <a href={url} target="_blank" rel="noreferrer" className="block w-fit">
-            <img src={url} alt="Photo for this post" className="max-h-72 rounded-md ring-1 ring-stone-200" />
+            <img src={url} alt="Photo for this post" className="max-h-72 rounded-md ring-1 ring-stone-200" onError={() => setRefresh((n) => n + 1)} />
           </a>
         ) : (
           <p className="text-xs text-stone-500">Loading photo…</p>
@@ -91,16 +99,10 @@ export function PostPhoto({
       )}
       {sha256 && (
         <p className="text-xs text-stone-500">
-          Photo fingerprint <code>{sha256.slice(0, 12)}</code>
-          {url && (
-            <>
-              {' '}
-              ·{' '}
-              <a href={url} download className="underline">
-                download
-              </a>
-            </>
-          )}
+          Photo file ID <code>{sha256.slice(0, 12)}</code> (part of what is approved) ·{' '}
+          <button className="underline" onClick={() => void downloadPhoto()}>
+            download photo
+          </button>
         </p>
       )}
       {canEdit && (
