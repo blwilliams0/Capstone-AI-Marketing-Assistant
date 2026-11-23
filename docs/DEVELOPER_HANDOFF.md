@@ -66,7 +66,7 @@ npm test
 
 **Running the app in a browser needs a database and Supabase sign-in.** Copy `.env.example` to `.env.local` and fill it in. Choose one option with Blake:
 
-- **Option A, your own free Supabase project (recommended for experiments).** Create a free project, put its values in `.env.local`, then run `npm run db:migrate` and `npm run bootstrap-admin -w @the-pocket/api` to make yourself admin. Your data is separate, so nothing you try can break the shared database.
+- **Option A, your own free Supabase project (recommended for experiments).** Create a free project, put its values in `.env.local`, then run `npm run db:migrate` and `npm run bootstrap-admin -- --email you@example.com --name "Your Name"` to make yourself admin (it emails you an invitation). Your data is separate, so nothing you try can break the shared database.
 - **Option B, the team's dev project.** Blake adds you to the Supabase project, and you copy the keys from the dashboard yourself. Never send keys by chat, email or GitHub. The dev project holds real client information, so be careful with it.
 
 Leave `ANTHROPIC_API_KEY` empty. The app then uses a labelled mock AI at no cost.
