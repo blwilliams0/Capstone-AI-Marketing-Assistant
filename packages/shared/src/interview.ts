@@ -117,6 +117,10 @@ export const isInterviewQuestionId = (id: string) => {
 };
 
 export const startInterviewSchema = z.object({
+  /** A name for the interview itself, e.g. "First brand interview". */
+  label: z.string().trim().max(120).optional(),
+  /** Practice interviews are kept but never used to compare managers' views. */
+  isPractice: z.boolean().default(false),
   intervieweeName: z.string().trim().min(1, 'Who is being interviewed?').max(120),
   intervieweeRole: z.string().trim().max(120).optional(),
   /** They agreed to detailed notes being kept. Required to use the app for the interview. */
@@ -131,6 +135,36 @@ export const saveAnswerSchema = z.object({
   questionText: z.string().trim().max(1000).optional(),
   answer: z.string().trim().max(8000),
 });
+
+export const updateInterviewSchema = z.object({
+  label: z.string().trim().max(120).nullable().optional(),
+  isPractice: z.boolean().optional(),
+});
+
+export const TRANSCRIPT_MAX_CHARS = 150_000;
+export const uploadTranscriptSchema = z.object({
+  fileName: z.string().trim().max(200).optional(),
+  text: z.string().trim().min(20, 'The transcript looks empty').max(TRANSCRIPT_MAX_CHARS, 'Transcripts can be up to 150,000 characters (about 2 hours)'),
+});
+
+export const fillFromTranscriptSchema = z.object({
+  transcriptId: z.string().uuid(),
+  /** Also replace answers someone already typed. Off by default. */
+  replaceTyped: z.boolean().default(false),
+});
+
+export interface TranscriptFillResult {
+  /** Questions that got an answer from the transcript. */
+  filled: string[];
+  /** Questions the transcript covered but that already had a typed answer (kept). */
+  keptTyped: string[];
+  /** Guide questions the transcript did not seem to cover. */
+  notCovered: string[];
+  /** Excerpts the AI returned that are not word for word in the transcript (dropped). */
+  droppedExcerpts: number;
+  warnings: string[];
+  provider: 'anthropic' | 'mock';
+}
 
 export const followUpSchema = z.object({ questionId: z.string().refine(isInterviewQuestionId, 'Unknown question') });
 
@@ -148,10 +182,14 @@ export interface InterviewAnswerView {
   answer: string;
   recordedBy: { id: string; name: string };
   recordedAt: string;
+  /** 'transcript': filled by the AI from an uploaded transcript (excerpts checked word for word). */
+  source: 'typed' | 'transcript';
 }
 
 export interface InterviewSessionSummary {
   id: string;
+  label: string | null;
+  isPractice: boolean;
   intervieweeName: string;
   intervieweeRole: string | null;
   status: 'in_progress' | 'completed';
@@ -187,5 +225,6 @@ export interface InterviewExtraction {
 
 export interface InterviewSessionDetail extends InterviewSessionSummary {
   answers: InterviewAnswerView[];
+  transcripts: { id: string; fileName: string | null; characters: number; uploadedBy: { id: string; name: string }; uploadedAt: string }[];
   extractions: InterviewExtraction[];
 }

@@ -37,11 +37,14 @@ coverage
 *.sqlite
 
 # Uploads
-uploads
-media
-uploads/*
-media/*
+/uploads/
+/media/
 
 # Local env variants
 .env*.local
 .turbo
+
+# Private client details and research: keep off GitHub (owner decision 2026-11-23).
+# They live only on this laptop and in the app database.
+docs/research/
+docs/strategy/CLIENT_FACTS_FROM_TEAM_ANALYSES.md

@@ -113,7 +113,7 @@ db/migrations    numbered SQL migrations
 
 ## Working rules for this project
 
-- Commit locally per milestone on a feature branch. **Never push without the owner's explicit permission.**
+- Work on a feature branch and commit per milestone. When a piece of work is finished and checked, **push the feature branch** without asking (the owner gave standing permission on 2026-11-21) and give them the pull-request link. The owner merges; never push to `main` directly.
 - Never print or echo credentials. Verification scripts against the live database or Supabase print only counts and statuses. `.env.local` holds real secrets and is git-ignored.
 - No new paid services, and no live AI spending beyond small approved checks.
 - Don't modify Supabase auth users, invitations or the admin membership unless asked.

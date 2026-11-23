@@ -1,12 +1,23 @@
 import type { RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { followUpSchema, saveAnswerSchema, saveInterviewProposalSchema, startInterviewSchema } from '@the-pocket/shared';
+import {
+  fillFromTranscriptSchema,
+  followUpSchema,
+  saveAnswerSchema,
+  saveInterviewProposalSchema,
+  startInterviewSchema,
+  updateInterviewSchema,
+  uploadTranscriptSchema,
+} from '@the-pocket/shared';
 import { AiUnavailableError, type AiDeps } from '../ai/assistant.js';
 import { badRequest } from '../knowledge/routes.js';
 import type { PolicyRouter } from '../policy.js';
 import {
   completeInterview,
   extractProposals,
+  fillFromTranscript,
+  updateInterview,
+  uploadTranscript,
   getInterview,
   listInterviews,
   saveAnswer,
@@ -111,6 +122,42 @@ export function addInterviewRoutes(r: PolicyRouter, deps: AiDeps, aiLimit: Reque
       if (out === 'not_found') return void fail(res, 404, 'Interview not found.', out);
       if (out === 'no_consent') return void fail(res, 409, 'The interviewee did not agree to AI use. Draft brand rules by hand in Knowledge instead.', out);
       if (out === 'no_answers') return void fail(res, 409, 'Record some answers first.', out);
+      res.json(out);
+    });
+  });
+
+  r.post('/interviews/:sessionId/details', 'interview.conduct', async (req, res) => {
+    const p = sessionParam.safeParse(req.params);
+    if (!p.success) return badRequest(res, p.error);
+    const b = updateInterviewSchema.safeParse(req.body ?? {});
+    if (!b.success) return badRequest(res, b.error);
+    const out = await updateInterview(db, req.auth!, p.data.sessionId, b.data, req.requestId);
+    if (out === 'not_found') return fail(res, 404, 'Interview not found.', out);
+    res.json({ status: 'updated' });
+  });
+
+  r.post('/interviews/:sessionId/transcripts', 'interview.conduct', async (req, res) => {
+    const p = sessionParam.safeParse(req.params);
+    if (!p.success) return badRequest(res, p.error);
+    const b = uploadTranscriptSchema.safeParse(req.body);
+    if (!b.success) return badRequest(res, b.error);
+    const out = await uploadTranscript(db, req.auth!, p.data.sessionId, b.data, req.requestId);
+    if (out === 'not_found') return fail(res, 404, 'Interview not found.', out);
+    if (out === 'completed') return fail(res, 409, 'This interview is completed; transcripts can no longer be added.', out);
+    res.status(201).json(out);
+  });
+
+  r.post('/interviews/:sessionId/transcripts/fill', 'interview.conduct', aiLimit, async (req, res) => {
+    const p = sessionParam.safeParse(req.params);
+    if (!p.success) return badRequest(res, p.error);
+    const b = fillFromTranscriptSchema.safeParse(req.body);
+    if (!b.success) return badRequest(res, b.error);
+    await withAi(res, async () => {
+      const out = await fillFromTranscript(deps, req.auth!, p.data.sessionId, b.data, req.requestId);
+      if (out === 'not_found') return void fail(res, 404, 'Interview not found.', out);
+      if (out === 'completed') return void fail(res, 409, 'This interview is completed.', out);
+      if (out === 'no_consent') return void fail(res, 409, 'The interviewee did not agree to AI use, so the transcript cannot be read by the AI. Type the answers in instead.', out);
+      if (out === 'no_transcript') return void fail(res, 404, 'Transcript not found.', out);
       res.json(out);
     });
   });

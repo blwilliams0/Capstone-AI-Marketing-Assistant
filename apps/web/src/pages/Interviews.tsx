@@ -10,6 +10,8 @@ export function Interviews() {
   const [list, setList] = useState<InterviewSessionSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [label, setLabel] = useState('');
+  const [isPractice, setIsPractice] = useState(false);
   const [role, setRole] = useState('');
   const [notesConsent, setNotesConsent] = useState(false);
   const [aiConsent, setAiConsent] = useState(false);
@@ -29,7 +31,7 @@ export function Interviews() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await apiFetch('/api/interviews', { method: 'POST', body: { intervieweeName: name, intervieweeRole: role || undefined, notesConsent, aiConsent } });
+    const res = await apiFetch('/api/interviews', { method: 'POST', body: { label: label || undefined, isPractice, intervieweeName: name, intervieweeRole: role || undefined, notesConsent, aiConsent } });
     setBusy(false);
     if (res.ok) navigate(`/interviews/${((await res.json()) as { sessionId: string }).sessionId}`);
     else setError(await readError(res));
@@ -47,6 +49,14 @@ export function Interviews() {
 
       <Card title="Start an interview">
         <form onSubmit={start} className="space-y-4">
+          <label className="block text-sm font-medium">
+            Name this interview (optional)
+            <input className={inputClass} maxLength={120} placeholder="e.g. First brand interview" value={label} onChange={(e) => setLabel(e.target.value)} />
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1" checked={isPractice} onChange={(e) => setIsPractice(e.target.checked)} />
+            This is a practice interview. It is kept, but never used to compare managers&apos; real answers.
+          </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm font-medium">
               Who are you interviewing?
@@ -83,9 +93,11 @@ export function Interviews() {
           {list?.map((s) => (
             <li key={s.id} className="py-3">
               <Link to={`/interviews/${s.id}`} className="font-medium underline">
+                {s.label ? `${s.label}: ` : ''}
                 {s.intervieweeName}
                 {s.intervieweeRole && ` (${s.intervieweeRole})`}
               </Link>
+              {s.isPractice && <span className="ml-2 rounded-full bg-stone-100 px-2 text-xs text-stone-600">Practice</span>}
               <p className="text-xs text-stone-500">
                 {s.status === 'completed' ? 'Completed' : 'In progress'} · {s.answered} of {INTERVIEW_QUESTIONS.length} questions answered · started {new Date(s.createdAt).toLocaleDateString()} by{' '}
                 {s.conductedBy.name} · {s.aiConsent ? 'AI help allowed' : 'no AI use'}

@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { createPgDb } from '@the-pocket/db';
 import { capabilitiesFor, isRole, knowledgeKindSchema } from '@the-pocket/shared';
 import { recordAudit } from '../audit.js';
-import { createItem } from '../knowledge/service.js';
+import { createItem, proposeVersion } from '../knowledge/service.js';
 
 /**
  * Loads a document into the knowledge library AS A PROPOSAL. It is never approved by this script;
@@ -21,6 +21,7 @@ const { values } = parseArgs({
     source: { type: 'string' },
     'as-email': { type: 'string' },
     'as-first-admin': { type: 'boolean', default: false },
+    update: { type: 'boolean', default: false },
   },
 });
 
@@ -28,7 +29,7 @@ const url = process.env.DATABASE_URL;
 const kind = knowledgeKindSchema.safeParse(values.kind);
 if (!url || !values.file || !values.title || !kind.success || (!values['as-email'] && !values['as-first-admin'])) {
   console.error(
-    'Usage: --file <path> --kind <brand_rule|fact|strategy|reference> --title "<title>" (--as-email <email> | --as-first-admin) [--source "<note>"]\nRequires DATABASE_URL.',
+    'Usage: --file <path> --kind <brand_rule|fact|strategy|reference> --title "<title>" (--as-email <email> | --as-first-admin) [--source "<note>"] [--update]\n--update proposes a new version when the title already exists and the text changed.\nRequires DATABASE_URL.',
   );
   process.exit(1);
 }
@@ -50,28 +51,41 @@ try {
     process.exit(1);
   }
 
-  const [existing] = await db.query(
-    `SELECT 1 FROM knowledge_items WHERE restaurant_id = $1 AND kind = $2 AND title = $3`,
+  const authCtx = {
+    userId: actor.user_id,
+    email: actor.email,
+    name: actor.name,
+    restaurantId: actor.restaurant_id,
+    membershipId: actor.id,
+    role: actor.role,
+    capabilities: capabilitiesFor(actor.role),
+  };
+  const sourceNote =
+    values.source ?? `Loaded from ${values.file} by setup script on ${new Date().toISOString().slice(0, 10)}. Pending management approval.`;
+  const [existing] = await db.query<{ id: string; latest: string | null }>(
+    `SELECT i.id, (SELECT v.body FROM knowledge_versions v WHERE v.item_id = i.id ORDER BY v.version DESC LIMIT 1) AS latest
+       FROM knowledge_items i WHERE i.restaurant_id = $1 AND i.kind = $2 AND i.title = $3`,
     [actor.restaurant_id, kind.data, values.title],
   );
-  if (existing) {
-    console.log(`Already loaded: "${values.title}". Nothing changed.`);
+  if (existing && (!values.update || existing.latest?.trim() === body)) {
+    console.log(`Already loaded: "${values.title}". Nothing changed.${values.update ? '' : ' Use --update to propose a new version.'}`);
+  } else if (existing) {
+    const out = await proposeVersion(db, authCtx, existing.id, { body, sourceNote });
+    if (typeof out === 'string') {
+      console.error(`Could not add a new version: ${out}.`);
+      process.exit(1);
+    }
+    await recordAudit(db, {
+      restaurantId: actor.restaurant_id,
+      actorUserId: actor.user_id,
+      action: 'knowledge.loaded_by_script',
+      targetType: 'knowledge_version',
+      targetId: out.versionId,
+      details: { file: values.file, note: 'New version proposed by the load-knowledge setup script, not by a click in the app.' },
+    });
+    console.log(`Proposed version ${out.version} of "${values.title}" (${body.length.toLocaleString()} characters). An administrator must approve it in the app.`);
   } else {
-    const sourceNote =
-      values.source ?? `Loaded from ${values.file} by setup script on ${new Date().toISOString().slice(0, 10)}. Pending management approval.`;
-    const out = await createItem(
-      db,
-      {
-        userId: actor.user_id,
-        email: actor.email,
-        name: actor.name,
-        restaurantId: actor.restaurant_id,
-        membershipId: actor.id,
-        role: actor.role,
-        capabilities: capabilitiesFor(actor.role),
-      },
-      { kind: kind.data, title: values.title, body, sourceNote },
-    );
+    const out = await createItem(db, authCtx, { kind: kind.data, title: values.title, body, sourceNote });
     await recordAudit(db, {
       restaurantId: actor.restaurant_id,
       actorUserId: actor.user_id,
