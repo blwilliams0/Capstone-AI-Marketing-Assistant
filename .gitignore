@@ -37,10 +37,8 @@ coverage
 *.sqlite
 
 # Uploads
-uploads
-media
-uploads/*
-media/*
+/uploads/
+/media/
 
 # Local env variants
 .env*.local
