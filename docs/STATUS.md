@@ -9,6 +9,8 @@ Last updated: 2026-11-18 (M3). The M3 summary below is newest; the 2026-11-13 mo
 - The isolated preview starts its own PostgreSQL cluster, uses mock authentication and AI, and can attach privately stored practice photos to exact post versions. See [Studio preview](STUDIO_PREVIEW.md).
 - Standalone assets, multimodal evaluation, visual references, photo filtering, campaign versions, and performance integration remain planned extensions. The branch does not add production analytics, schema migrations, or a live integration.
 
+Follow-up review items: confirm whether an original approver's revoked access should block recording distribution (the architecture addendum calls for it), move complete reporting off the capped list endpoints, reconcile Pacific-time boundaries, and evaluate spend reservations for concurrent AI requests with the M5 owner. The Studio photo path keeps the caption's existing knowledge references until the text is reviewed and edited.
+
 ## Morning summary (2026-11-13 run)
 
 **Done and committed locally (branch `stage1-remediation`, nothing pushed):**

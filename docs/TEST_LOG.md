@@ -420,3 +420,11 @@ Two Fable-model reviews (photo upload security; whole-project bug hunt plus plan
 **Live:** migration 010 applied; 26 tables with RLS; 0 public access. `npm audit --omit=dev`: 0 vulnerabilities.
 
 **Not yet measured live:** cost of filling from a transcript. Estimate about 30–60 cents for a one-hour interview (about 25,000 input tokens plus the excerpts).
+
+## 15. Marketing Studio practice preview (2026-11-24)
+
+On `feat/marketing-studio` at `053e05b`, Node 24.22.3 passed `npm run build`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run check:bundle`. The full suite reported 222 passes (shared 7, DB 63, API 143, worker 9). The bundle scan checked three files and found no server secrets or mock sign-in.
+
+The two new tests cover actual decode, malformed and oversized images, orientation and metadata stripping, cross-restaurant denial, private retrieval of previous versions, approval invalidation and stale fact references after photo replacement.
+
+On the local PostgreSQL preview, an HTTP smoke test exercised the mock Advisor, private conversation history, role-based upload denial, photo upload and retrieval, approval, Ready to Post, and invalidation after photo replacement. In shared Chrome, the admin Overview, mock Advisor reply, prefilled draft handoff, and approval filter were exercised. Tablet and phone layouts, a browser file-picker flow, a Mac run, shared Supabase and live Claude were outside this verification pass.
