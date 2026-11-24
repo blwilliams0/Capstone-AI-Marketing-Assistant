@@ -44,3 +44,18 @@ The preview is a private practice workspace. It uses a dedicated local PostgreSQ
 - Choose **viewer** to see the restricted navigation. On a narrow screen open **Menu** and press Escape to close it.
 
 Invitations and real provider responses require their respective real services. Use the practice roles and fictional or authorized assets for preview exercises.
+
+## Update an existing Mac checkout
+
+Stop the running preview, open Terminal in your existing repository, then run:
+
+```bash
+git switch feat/marketing-studio
+git pull --ff-only origin feat/marketing-studio
+export PATH="$(brew --prefix node@24)/bin:$PATH"
+POCKET_PREVIEW_PG_BIN="$(brew --prefix postgresql@17)/bin" bash scripts/preview.sh
+```
+
+Wait for the terminal to print the preview URL. The launcher checks the API before starting the browser app and applies new migrations to the existing practice database. This update leaves the dependency lockfile unchanged. If the folder is inside a cloud-synchronized Desktop and build performance remains poor, consider keeping the checkout in a local development directory. The cause of the original Mac delay was not established.
+
+To supply the authorized logo, add a transparent-background PNG at `apps/web/public/brand/the-pocket-logo.png`. Visual Studio supports private uploads, edits, and local draft attachment. To download an edited photo, choose **Prepare PNG**, then **Download PNG**. Feed Planner orders draft visuals in this browser. It displays recorded posts separately and never modifies publication dates.

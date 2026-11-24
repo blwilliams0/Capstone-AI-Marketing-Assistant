@@ -428,3 +428,9 @@ On `feat/marketing-studio` at `053e05b`, Node 24.22.3 passed `npm run build`, `n
 The two new tests cover actual decode, malformed and oversized images, orientation and metadata stripping, cross-restaurant denial, private retrieval of previous versions, approval invalidation and stale fact references after photo replacement.
 
 On the local PostgreSQL preview, an HTTP smoke test exercised the mock Advisor, private conversation history, role-based upload denial, photo upload and retrieval, approval, Ready to Post, and invalidation after photo replacement. In shared Chrome, the admin Overview, mock Advisor reply, prefilled draft handoff, and approval filter were exercised. Tablet and phone layouts, a browser file-picker flow, a Mac run, shared Supabase and live Claude were outside this verification pass.
+
+## 16. Editorial design and Visual Studio (2026-11-24)
+
+The isolated feature-branch run passed build, typecheck, lint, tests and the bundle check. Tests reported 223 passes (shared 7, database 63, API 144, worker 9). The added test verifies duplicate finalization, user and restaurant isolation, normalized image bytes reaching a mock provider, derivative lineage and usage recording.
+
+Cloud Chrome showed explicit dark foreground and pearl background on the Overview action. A contributor uploaded a fictional photo through the file picker, saw the simulated review, saved a square crop, downloaded a decoded 250×250 PNG from the 400×250 source, and added the edit to Feed Planner. A local PostgreSQL/API smoke test attached the edited image to an approved draft and verified the previous approval was superseded. Browser checks covered desktop contributor mode. Dedicated mobile, macOS, live Supabase and live Claude runs were outside this verification pass.

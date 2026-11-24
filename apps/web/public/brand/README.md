@@ -1,0 +1,1 @@
+Place the supplied authorized logo here as `the-pocket-logo.png`. Use a transparent-background PNG to preserve the mark and allow the sidebar to show the same design in ivory. Keep the source logo separately if you are preparing a transparent copy. The Studio displays a plain text name when the file is unavailable.

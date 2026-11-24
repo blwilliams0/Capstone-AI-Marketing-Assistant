@@ -64,7 +64,7 @@ export function VisualWorkspace({ advisor = false }: { advisor?: boolean }) {
   const [retry, setRetry] = useState<Upload>();
   const selected = assets?.find((asset) => asset.id === active);
   const canUse = me?.capabilities.includes('content.draft') ?? false;
-  const canReview = me?.capabilities.includes('assistant.use') ?? false;
+  const canReview = __MOCK_AUTH__ && (me?.capabilities.includes('assistant.use') ?? false);
 
   const load = useCallback(async () => {
     const result = await apiFetch('/api/visual/assets');

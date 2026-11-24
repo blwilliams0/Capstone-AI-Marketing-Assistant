@@ -2,6 +2,12 @@
 
 Last updated: 2026-11-18 (M3). The M3 summary below is newest; the 2026-11-13 morning summary is kept for history. Labels: *working in test*, *live* (verified against the real dev Supabase project), *not yet verified*, *deferred*. Plan: `The_Pocket_AI_Architecture_Addendum_v0_4.md` §7.
 
+## Studio visual checkpoint (2026-11-24)
+
+- The slate, taupe and ivory design uses locally bundled licensed Raleway and Cormorant Garamond. Buttons explicitly pair foreground and background. The supplied logo file still needs to be placed in the repository.
+- Migration 011 adds private immutable assets and derivative lineage. Local photo editing exports PNG pixels and keeps normalized source images. The preview supports private upload, library filtering, simulated photo comparison in Visual Studio and Advisor, practice attachment to drafts, and a browser-local Instagram plan alongside recorded posts.
+- Live photo evaluation and Supabase validation, approved visual references and presets, shared library workflow metadata, and the broader campaign, planning and measurement roadmap remain open. Coordinate migration numbering and future activity/performance changes with M5.
+
 ## Studio feature branch (2026-11-24)
 
 - Shared palette and typography, responsive capability-aware sidebar, dedicated practice sign-in and direct approval queue link.

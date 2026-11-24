@@ -105,3 +105,12 @@ Every response carries an `X-Request-Id` header that matches the server log line
 ## Adding a route
 
 Routes are added only through `PolicyRouter` in `apps/api/src/policy.ts`, which requires a permission argument. `rbac.test.ts` automatically tests every registered route against every role.
+
+### Private Visual Studio
+
+| Method and path | Capability | Behavior |
+| --- | --- | --- |
+| `GET /api/visual/assets` | `content.draft` | Lists the caller's studio assets inside the active restaurant. |
+| `POST /api/visual/assets` | `content.draft` | JPEG, PNG or WebP bytes with `X-Photo-Id` UUID and URL-encoded `X-Photo-Label`. Optional paired `X-Photo-Parent` UUID and `X-Photo-Edits` JSON preserve immutable derivative lineage. An identical retry returns the existing asset. |
+| `GET /api/visual/assets/:id/image` | `content.draft` | Returns private full image bytes or `?size=thumb` WebP for the owner. |
+| `POST /api/visual/review` | `assistant.use` and `content.draft` | Accepts one to three owned IDs and explicit privacy confirmation. Records usage and returns a simulated structured result in practice mode. Live providers are disabled here. |

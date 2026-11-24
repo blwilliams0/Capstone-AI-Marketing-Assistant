@@ -16,6 +16,7 @@ export function PhotoEditor({ url, save }: { url: string; save: (image: Blob, ed
   const [image, setImage] = useState<HTMLImageElement>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [prepared, setPrepared] = useState<{ url: string; recipe: VisualRecipe }>();
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -34,10 +35,12 @@ export function PhotoEditor({ url, save }: { url: string; save: (image: Blob, ed
     return () => cancelAnimationFrame(frame);
   }, [image, recipe, before]);
 
+  useEffect(() => () => { if (prepared) URL.revokeObjectURL(prepared.url); }, [prepared]);
+
   function applyPreset(name: string, strength: number) {
     setPreset(name);
     setIntensity(strength);
-    const edits = presets.find((item) => item.name === name)?.edits ?? {};
+    const edits: Partial<Record<(typeof controls)[number][0], number>> = presets.find((item) => item.name === name)?.edits ?? {};
     setRecipe({ ...neutralRecipe, crop: recipe.crop,
       ...Object.fromEntries(Object.entries(edits).map(([field, value]) => [field, value * strength / 100])),
     });
@@ -50,14 +53,7 @@ export function PhotoEditor({ url, save }: { url: string; save: (image: Blob, ed
     try {
       const blob = await exportPhoto(image, recipe);
       if (mode === 'save') await save(blob, recipe);
-      else {
-        const url = URL.createObjectURL(blob);
-        const download = document.createElement('a');
-        download.href = url;
-        download.download = 'pocket-photo.png';
-        download.click();
-        window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-      }
+      else setPrepared({ url: URL.createObjectURL(blob), recipe });
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not finish the image.');
     } finally {
@@ -73,7 +69,8 @@ export function PhotoEditor({ url, save }: { url: string; save: (image: Blob, ed
         </div>
         <div className="flex flex-wrap gap-2">
           <button className={secondaryButtonClass} aria-pressed={before} onClick={() => setBefore(!before)}>{before ? 'Show adjustments' : 'Show before'}</button>
-          <button className={secondaryButtonClass} disabled={!image || busy} onClick={() => void finish('download')}>Export PNG</button>
+          <button className={secondaryButtonClass} disabled={!image || busy} onClick={() => void finish('download')}>Prepare PNG</button>
+          {prepared?.recipe === recipe && <a className={secondaryButtonClass} href={prepared.url} download="pocket-photo.png">Download PNG</a>}
           <button className={buttonClass} disabled={!image || busy} onClick={() => void finish('save')}>Save edited copy</button>
         </div>
         {error && <Alert kind="error">{error}</Alert>}
