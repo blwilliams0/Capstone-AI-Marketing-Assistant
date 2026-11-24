@@ -91,8 +91,8 @@ export function Home() {
   ];
 
   return (
-    <div className="space-y-6">
-      <header className="rounded-xl bg-stone-900 px-6 py-8 text-stone-50 sm:px-9">
+    <div className="space-y-5">
+      <header className="rounded-lg bg-studio-slate px-6 py-7 text-stone-50 sm:px-9">
         <h1 className="text-3xl sm:text-4xl">Marketing overview</h1>
         <p className="mt-2 text-sm text-stone-100">Welcome, {me.name}. Check what needs attention and prepare what comes next.</p>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -116,7 +116,7 @@ export function Home() {
             </section>
           )}
           {data.posts.length >= 200 && <p className="text-xs text-stone-600">Counts cover the 200 most recent records returned by Content.</p>}
-          <div className="grid gap-5 xl:grid-cols-2">
+          <div className="grid gap-5 lg:grid-cols-2">
             <Card title="Needs attention">
               {unread.length ? <ul className="divide-y divide-stone-200">{unread.map((notification) => (
                 <li key={notification.id} className="py-2">

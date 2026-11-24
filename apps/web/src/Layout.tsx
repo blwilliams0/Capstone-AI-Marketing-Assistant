@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router';
 import type { Capability } from '@the-pocket/shared';
+import { StudioIdentity } from './ui';
 import { useAuth } from './auth';
 
 interface NavItem {
@@ -77,10 +78,7 @@ export function Layout() {
       <aside className="bg-stone-900 text-stone-50 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:overflow-auto"
         onKeyDown={(event) => { if (event.key === 'Escape') closeMenu(); }}>
         <div className="flex items-center justify-between px-6 py-5 lg:py-8">
-          <div>
-            <p className="font-serif text-2xl leading-none">The Pocket</p>
-            <p className="mt-2 text-xs text-stone-300">Marketing Studio</p>
-          </div>
+          <StudioIdentity sidebar />
           <button ref={menuButton} type="button" className="rounded-md border border-stone-400 px-3 py-2 text-sm lg:hidden"
             aria-controls="studio-navigation" aria-expanded={open} onClick={() => setOpen(!open)}>
             {open ? 'Close menu' : 'Menu'}
@@ -103,7 +101,7 @@ export function Layout() {
                       return (
                         <li key={to}>
                           <Link to={to} aria-current={active ? 'page' : false} onClick={closeMenu}
-                            className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${active ? 'bg-stone-700 font-medium text-white' : 'hover:bg-stone-700/65'}`}>
+                            className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${active ? 'bg-studio-ivory font-semibold text-studio-ink' : 'hover:bg-stone-700/65'}`}>
                             {label}
                             {to === '/reminders' && unread > 0 && (
                               <span className="rounded-full bg-stone-300 px-2 text-xs text-stone-900" aria-label={`${unread} unread`}>{unread}</span>
@@ -124,7 +122,7 @@ export function Layout() {
           </div>
         </div>
       </aside>
-      <main id="workspace" tabIndex={-1} className="mx-auto w-full max-w-6xl min-w-0 px-4 py-7 sm:px-8 lg:py-10">
+      <main id="workspace" tabIndex={-1} className="mx-auto w-full max-w-7xl min-w-0 px-4 py-7 sm:px-8 lg:py-10">
         <Outlet />
       </main>
     </div>
