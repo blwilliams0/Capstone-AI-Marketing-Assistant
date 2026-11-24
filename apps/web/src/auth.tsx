@@ -32,6 +32,8 @@ export const supabase: SupabaseClient | null =
 
 type Status = 'loading' | 'signed_out' | 'needs_password' | 'ready' | 'no_access' | 'error';
 
+type ApiOptions = { method?: string; body?: unknown };
+
 interface AuthState {
   status: Status;
   me: MeResponse | null;
@@ -44,7 +46,7 @@ interface AuthState {
   sendResetLink(email: string): Promise<string | null>;
   setPassword(password: string): Promise<string | null>;
   signOut(): Promise<void>;
-  apiFetch(path: string, init?: { method?: string; body?: unknown }): Promise<Response>;
+  apiFetch(path: string, init?: ApiOptions): Promise<Response>;
 }
 
 const Ctx = createContext<AuthState | null>(null);
@@ -73,16 +75,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const needsPassword = useRef(arrivedToSetPassword && !__MOCK_AUTH__);
   const meRef = useRef<MeResponse | null>(null);
 
-  const apiFetch = useCallback(async (path: string, init?: { method?: string; body?: unknown }) => {
+  const apiFetch = useCallback(async (path: string, init?: ApiOptions) => {
     const token = await currentToken();
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (init?.body !== undefined) headers['Content-Type'] = 'application/json';
+    const body = init?.body;
+    if (body !== undefined) headers['Content-Type'] = body instanceof Blob ? body.type : 'application/json';
     try {
       return await fetch(`${__API_URL__}${path}`, {
         method: init?.method ?? 'GET',
         headers,
-        body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+        body: body instanceof Blob ? body : body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch {
       // Network failure (server stopped, Wi-Fi dropped): answer like an error response, so every

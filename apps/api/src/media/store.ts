@@ -12,6 +12,8 @@ export type MediaType = keyof typeof MEDIA_TYPES;
  * the API has checked their permission.
  */
 export interface MediaStore {
+  /** Present only in the development-only local storage adapter. */
+  storePracticePhoto?(path: string, bytes: Uint8Array): Promise<void>;
   createUploadLink(path: string): Promise<{ path: string; token: string }>;
   /** null when missing; 'too_large' (without reading it into memory) when over maxBytes. */
   download(path: string, maxBytes: number): Promise<Uint8Array | null | 'too_large'>;

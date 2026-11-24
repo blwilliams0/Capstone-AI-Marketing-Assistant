@@ -450,7 +450,9 @@ export async function editPost(db: Db, actor: AuthContext, itemId: string, input
     if ((await tx.query(`SELECT 1 FROM post_records WHERE item_id = $1`, [itemId])).length) return 'posted' as const;
     const [prev] = await tx.query<VersionRow>(`${VERSION_SELECT} WHERE v.item_id = $1 ORDER BY v.version DESC LIMIT 1`, [itemId]);
     const open = await tx.query(`SELECT 1 FROM approval_requests WHERE item_id = $1 AND status IN ('pending', 'approved')`, [itemId]);
-    const { ids: sources, removed } = await refreshSources(tx, actor.restaurantId, prev!.knowledge_version_ids);
+    const { ids: sources, removed } = input.media === undefined
+      ? await refreshSources(tx, actor.restaurantId, prev!.knowledge_version_ids)
+      : { ids: prev!.knowledge_version_ids, removed: prev!.sources_removed };
     const next = prev!.version + 1;
     const [v] = await tx.query<{ id: string; digest: string }>(
       `INSERT INTO content_versions (item_id, restaurant_id, version, channel, audience, angle, caption, photo_plan, scheduled_for, knowledge_version_ids, sources_removed, origin, created_by, media_path, media_sha256)

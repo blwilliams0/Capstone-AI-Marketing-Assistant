@@ -2,6 +2,13 @@
 
 Last updated: 2026-11-18 (M3). The M3 summary below is newest; the 2026-11-13 morning summary is kept for history. Labels: *working in test*, *live* (verified against the real dev Supabase project), *not yet verified*, *deferred*. Plan: `The_Pocket_AI_Architecture_Addendum_v0_4.md` §7.
 
+## Studio feature branch (2026-11-24)
+
+- Shared palette and typography, responsive capability-aware sidebar, dedicated practice sign-in and direct approval queue link.
+- Overview uses current post state, reminders, activity and calendar dates. Advisor uses the existing private history and explicit handoff to the draft form. Brand Studio filters the existing approved knowledge categories.
+- The isolated preview starts its own PostgreSQL cluster, uses mock authentication and AI, and can attach privately stored practice photos to exact post versions. See [Studio preview](STUDIO_PREVIEW.md).
+- Standalone assets, multimodal evaluation, visual references, photo filtering, campaign versions, and performance integration remain planned extensions. The branch does not add production analytics, schema migrations, or a live integration.
+
 ## Morning summary (2026-11-13 run)
 
 **Done and committed locally (branch `stage1-remediation`, nothing pushed):**

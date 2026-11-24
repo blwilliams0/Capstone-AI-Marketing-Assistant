@@ -63,7 +63,8 @@ The old `/api/qwen/*` and `/api/social/*` routes from the first draft were remov
 | `POST /api/posts/:itemId/media/upload-link` | `content.draft` | `{ contentType: image/jpeg, image/png or image/webp }` → one-time upload link for a fresh, server-chosen path. |
 | `POST /api/posts/:itemId/media` | `content.draft` | `{ path }` after uploading. The server downloads it, checks the real type and size (10 MB), fingerprints it (SHA-256) and saves a **new version**, so an approved post needs approval again. |
 | `POST /api/posts/:itemId/media/remove` | `content.draft` | New version without a photo. |
-| `GET /api/posts/:itemId/media?versionId=` | `content.view` | Short-lived (5 minute) link to view or download that version's photo. |
+| `GET /api/posts/:itemId/media?versionId=` | `content.view` | Short-lived link for Supabase photos. In the local practice workspace, returns the authorized version's image bytes with `Cache-Control: private, no-store`. |
+| `POST /api/posts/:itemId/media/practice` | `content.draft` | Development practice workspace only. Raw JPEG, PNG or WebP, up to 10 MB and 16 megapixels. The server decodes, normalizes and fingerprints the attachment and creates a post version. |
 
 **Brand interviews (M4a)**, all `interview.conduct` except saving a suggestion (`knowledge.propose`):
 - `GET` and `POST /api/interviews`, `GET /api/interviews/:sessionId`

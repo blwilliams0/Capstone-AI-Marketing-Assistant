@@ -6,6 +6,7 @@ import { createSupabaseVerifier } from './auth/tokens.js';
 import { loadConfig } from './config.js';
 import { createClaudeAiProvider, createClaudeClient } from './ai/claude.js';
 import { createMockAiProvider } from './ai/provider.js';
+import { createLocalMediaStore } from './media/local.js';
 import { createSupabaseMediaStore, ensureMediaBucket } from './media/store.js';
 
 const config = loadConfig(); // throws (and the process exits) on unsafe or incomplete configuration
@@ -45,8 +46,9 @@ const ai =
       ? createMockAiProvider()
       : null;
 
+const practiceMediaDirectory = config.authMode === 'mock' ? process.env.POCKET_PREVIEW_MEDIA_DIR : undefined;
 const media =
-  config.supabaseUrl && config.supabaseSecretKey
+  practiceMediaDirectory ? createLocalMediaStore(practiceMediaDirectory) : config.supabaseUrl && config.supabaseSecretKey
     ? createSupabaseMediaStore({ supabaseUrl: config.supabaseUrl, secretKey: config.supabaseSecretKey })
     : undefined;
 

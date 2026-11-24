@@ -47,6 +47,7 @@ started_pg=yes
 export DATABASE_URL="postgresql://pocket_preview@127.0.0.1:$pg_port/postgres"
 export NODE_ENV=development AUTH_MODE=mock ANTHROPIC_API_KEY='' SUPABASE_PUBLISHABLE_KEY=''
 export API_PORT="$api_port" WEB_ORIGIN="http://127.0.0.1:$web_port" VITE_API_URL=''
+export POCKET_PREVIEW_MEDIA_DIR="$preview_dir/media"
 export POCKET_PREVIEW_PROXY="http://127.0.0.1:$api_port"
 unset SUPABASE_URL SUPABASE_SECRET_KEY
 

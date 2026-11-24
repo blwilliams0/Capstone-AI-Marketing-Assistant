@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { Response } from 'express';
+import express, { type Response } from 'express';
 import { z } from 'zod';
 import type { Db } from '@the-pocket/db';
 import { editPost } from '../content/service.js';
 import { badRequest } from '../knowledge/routes.js';
 import type { PolicyRouter } from '../policy.js';
 import { MEDIA_BUCKET, MEDIA_MAX_BYTES, MEDIA_TYPES, sha256Hex, sniffImageType, type MediaStore, type MediaType } from './store.js';
+import { normalizePracticePhoto, practicePhotoType } from './local.js';
 import { rateLimit } from '../middleware.js';
 
 const itemParam = z.object({ itemId: z.string().uuid() });
@@ -32,13 +33,59 @@ export function addMediaRoutes(r: PolicyRouter, db: Db, media: MediaStore | unde
   const uploadLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 60 });
   const unavailable = (res: Response) => fail(res, 503, 'Photo storage is not set up. The server needs its Supabase secret key.', 'media_disabled');
 
+  const parsePhoto = express.raw({ type: Object.keys(MEDIA_TYPES), limit: MEDIA_MAX_BYTES, inflate: false });
+  r.post('/posts/:itemId/media/practice', 'content.draft', uploadLimit,
+    (req, res, next) => {
+      const params = itemParam.safeParse(req.params);
+      if (!params.success) return badRequest(res, params.error);
+      if (!media?.storePracticePhoto) return unavailable(res);
+      parsePhoto(req, res, (error?: { type?: string }) => {
+        if (!error) return next();
+        if (error.type === 'entity.too.large') {
+          fail(res, 413, 'Photos must be 10 MB or smaller.', 'too_large');
+        } else {
+          fail(res, 400, 'Could not read the photo upload.', 'invalid_photo');
+        }
+      });
+    },
+    async (req, res) => {
+      const p = itemParam.safeParse(req.params);
+      if (!p.success) return badRequest(res, p.error);
+      const contentType = uploadLinkSchema.safeParse({ contentType: req.get('content-type') });
+      if (!contentType.success) return badRequest(res, contentType.error);
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return fail(res, 400, 'Choose a JPEG, PNG or WebP photo.', 'not_an_image');
+      }
+      if (!media?.storePracticePhoto) return unavailable(res);
+      const a = req.auth!;
+      const state = await editable(db, a.restaurantId, p.data.itemId);
+      if (state === 'not_found') return fail(res, 404, 'Post not found.', state);
+      if (state === 'locked') return fail(res, 409, 'This post is archived or already posted.', state);
+
+      const extension = MEDIA_TYPES[contentType.data.contentType];
+      const bytes = await normalizePracticePhoto(req.body, extension);
+      if (!bytes || bytes.length > MEDIA_MAX_BYTES) {
+        return fail(res, 400, 'Choose a valid still photo under 16 megapixels and 10 MB.', 'invalid_photo');
+      }
+      const path = `${a.restaurantId}/${p.data.itemId}/${randomUUID()}.${extension}`;
+      const sha256 = sha256Hex(bytes);
+      await media.storePracticePhoto(path, bytes);
+      // Keep the object if the transaction result is uncertain. A committed version owns its bytes.
+      const out = await editPost(db, a, p.data.itemId, { media: { path, sha256 } }, req.requestId);
+      if (typeof out === 'string') {
+        await media.remove(path);
+        return fail(res, out === 'not_found' ? 404 : 409, 'This post can no longer be changed.', out);
+      }
+      res.status(201).json({ ...out, sha256 });
+    });
+
   // 1. A one-time upload link for one new, server-chosen path.
   r.post('/posts/:itemId/media/upload-link', 'content.draft', uploadLimit, async (req, res) => {
     const p = itemParam.safeParse(req.params);
     if (!p.success) return badRequest(res, p.error);
     const b = uploadLinkSchema.safeParse(req.body);
     if (!b.success) return badRequest(res, b.error);
-    if (!media) return unavailable(res);
+    if (!media || media.storePracticePhoto) return unavailable(res);
     const a = req.auth!;
     const state = await editable(db, a.restaurantId, p.data.itemId);
     if (state === 'not_found') return fail(res, 404, 'Post not found.', state);
@@ -54,7 +101,7 @@ export function addMediaRoutes(r: PolicyRouter, db: Db, media: MediaStore | unde
     if (!p.success) return badRequest(res, p.error);
     const b = attachSchema.safeParse(req.body);
     if (!b.success) return badRequest(res, b.error);
-    if (!media) return unavailable(res);
+    if (!media || media.storePracticePhoto) return unavailable(res);
     const a = req.auth!;
     const m = new RegExp(`^${a.restaurantId}/${p.data.itemId}/[0-9a-f-]{36}\\.(jpg|png|webp)$`).exec(b.data.path);
     if (!m) return fail(res, 400, 'That upload does not belong to this post.', 'bad_path');
@@ -104,11 +151,18 @@ export function addMediaRoutes(r: PolicyRouter, db: Db, media: MediaStore | unde
     const q = viewQuery.safeParse(req.query);
     if (!q.success) return badRequest(res, q.error);
     if (!media) return unavailable(res);
-    const [v] = await db.query<{ media_path: string | null }>(
-      `SELECT media_path FROM content_versions WHERE id = $1 AND item_id = $2 AND restaurant_id = $3`,
+    const [v] = await db.query<{ media_path: string | null; media_sha256: string | null }>(
+      `SELECT media_path, media_sha256 FROM content_versions WHERE id = $1 AND item_id = $2 AND restaurant_id = $3`,
       [q.data.versionId, p.data.itemId, req.auth!.restaurantId],
     );
     if (!v?.media_path) return fail(res, 404, 'No photo for that version.', 'not_found');
+    if (media.storePracticePhoto) {
+      const bytes = await media.download(v.media_path, MEDIA_MAX_BYTES);
+      const type = practicePhotoType(v.media_path);
+      if (!bytes || bytes === 'too_large' || !type || sha256Hex(bytes) !== v.media_sha256) return fail(res, 404, 'Photo unavailable.', 'not_found');
+      res.set('Cache-Control', 'private, no-store').type(type).send(Buffer.from(bytes));
+      return;
+    }
     res.json({ url: await media.viewLink(v.media_path, VIEW_SECONDS, { download: q.data.download === '1' }), expiresInSeconds: VIEW_SECONDS });
   });
 }
