@@ -35,6 +35,7 @@ export function Knowledge() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [search, setSearch] = useState('');
 
   const canPropose = me?.capabilities.includes('knowledge.propose') ?? false;
   const canApprove = me?.capabilities.includes('brand.approve') ?? false;
@@ -63,7 +64,10 @@ export function Knowledge() {
     return false;
   };
 
-  const shown = (items ?? []).filter((i) => i.kind === kind);
+  const query = search.trim().toLowerCase();
+  const shown = (items ?? []).filter((item) =>
+    item.kind === kind && (!query || item.title.toLowerCase().includes(query) || item.current?.body.toLowerCase().includes(query)),
+  );
   const pendingCount = (k: KnowledgeKind) => (items ?? []).filter((i) => i.kind === k && i.pending.length > 0).length;
 
   return (
@@ -113,10 +117,14 @@ export function Knowledge() {
           </button>
         ))}
       </div>
-      <p className="text-sm text-stone-600">{KNOWLEDGE_KIND_LABELS[kind].description}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-stone-600">{KNOWLEDGE_KIND_LABELS[kind].description}</p>
+        <input aria-label="Filter knowledge in this category" value={search} onChange={(event) => setSearch(event.target.value)}
+          placeholder="Filter this category" type="search" className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" />
+      </div>
 
       {!items && !error && <p className="text-sm text-stone-500">Loading…</p>}
-      {items && shown.length === 0 && <p className="text-sm text-stone-500">Nothing here yet.</p>}
+      {items && shown.length === 0 && <p className="text-sm text-stone-500">{query ? 'No items match this filter.' : 'Nothing here yet.'}</p>}
       <div className="space-y-4">
         {shown.map((item) => (
           <ItemCard key={item.id} item={item} canPropose={canPropose} canApprove={canApprove} myId={me?.userId ?? ''} act={act} />

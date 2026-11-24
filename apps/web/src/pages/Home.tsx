@@ -33,7 +33,11 @@ type OverviewData = {
 };
 
 function dayKey(date: Date) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const part = (key: Intl.DateTimeFormatPartTypes) => parts.find((value) => value.type === key)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, {
@@ -77,7 +81,7 @@ export function Home() {
   const can = (capability: string) => me.capabilities.includes(capability);
   const data = state.data;
   const unread = data?.reminders.notifications.filter((notification) => !notification.read).slice(0, 5) ?? [];
-  const upcoming = data?.calendar.posts.filter((post) => post.status !== 'posted' && post.status !== 'archived')
+  const upcoming = data?.calendar.posts.filter((post) => post.status !== 'posted' && post.status !== 'archived' && Date.parse(post.scheduledFor) >= Date.now())
     .sort((left, right) => left.scheduledFor.localeCompare(right.scheduledFor)).slice(0, 5) ?? [];
   const facts = data?.calendar.facts.slice(0, 5) ?? [];
   const counts = [
@@ -111,6 +115,7 @@ export function Home() {
               ))}
             </section>
           )}
+          {data.posts.length >= 200 && <p className="text-xs text-stone-600">Counts cover the 200 most recent records returned by Content.</p>}
           <div className="grid gap-5 xl:grid-cols-2">
             <Card title="Needs attention">
               {unread.length ? <ul className="divide-y divide-stone-200">{unread.map((notification) => (
