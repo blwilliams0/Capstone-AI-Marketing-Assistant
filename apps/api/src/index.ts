@@ -59,7 +59,8 @@ if (config.supabaseUrl && config.supabaseSecretKey) {
 
 const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd, media });
 
-const server = app.listen(config.port, () => {
+const hostname = config.authMode === 'mock' ? '127.0.0.1' : '0.0.0.0';
+const server = app.listen(config.port, hostname, () => {
   console.log(
     JSON.stringify({ level: 'info', msg: 'api started', port: config.port, authMode: config.authMode, aiMode: config.aiMode }),
   );
