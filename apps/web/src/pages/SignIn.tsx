@@ -26,6 +26,24 @@ export function SignIn() {
     setBusy(false);
   }
 
+  if (__MOCK_AUTH__) {
+    return (
+      <AuthShell>
+        <div className="mt-6 rounded-lg border-2 border-dashed border-amber-500 bg-amber-50 p-4">
+          <h2 className="mb-2 text-sm font-medium text-amber-900">Practice workspace</h2>
+          <p className="mb-4 text-sm">Choose a role. Practice data stays on this computer and AI replies are simulated.</p>
+          <div className="flex flex-wrap gap-2">
+            {ROLES.map((r: Role) => (
+              <button key={r} type="button" onClick={() => signInMock(r)} className="rounded border border-amber-600 px-3 py-1 text-sm">
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      </AuthShell>
+    );
+  }
+
   return (
     <AuthShell>
       <form onSubmit={submit} className="space-y-4 rounded-lg bg-white p-6 shadow-sm ring-1 ring-stone-200">
@@ -63,18 +81,6 @@ export function SignIn() {
         </button>
         <p className="text-sm text-stone-600">New here? Use the link in your invitation email to choose your password.</p>
       </form>
-      {__MOCK_AUTH__ && (
-        <div className="mt-6 rounded-lg border-2 border-dashed border-amber-500 bg-amber-50 p-4">
-          <p className="mb-2 text-sm font-medium text-amber-900">Developer mock sign-in (local development only)</p>
-          <div className="flex flex-wrap gap-2">
-            {ROLES.map((r: Role) => (
-              <button key={r} type="button" onClick={() => signInMock(r)} className="rounded border border-amber-600 px-3 py-1 text-sm">
-                {r}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </AuthShell>
   );
 }

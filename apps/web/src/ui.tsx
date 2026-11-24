@@ -10,8 +10,8 @@ export const secondaryButtonClass =
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900">
-      <div className="mx-auto max-w-md px-4 py-12">
-        <h1 className="mb-8 text-2xl font-semibold">The Pocket Marketing Assistant</h1>
+      <div className="mx-auto max-w-md px-5 py-16">
+        <h1 className="mb-8 text-3xl">The Pocket — Marketing Studio</h1>
         {children}
       </div>
     </div>
@@ -20,8 +20,8 @@ export function AuthShell({ children }: { children: ReactNode }) {
 
 export function Card({ title, children }: { title?: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-stone-200">
-      {title && <h2 className="mb-4 text-lg font-medium">{title}</h2>}
+    <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
+      {title && <h2 className="mb-4 font-serif text-xl">{title}</h2>}
       {children}
     </section>
   );
