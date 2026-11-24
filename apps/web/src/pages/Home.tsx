@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { ROLE_DESCRIPTIONS, type NotificationsResponse, type PostSummary } from '@the-pocket/shared';
+import { APPROVAL_EVENT_LABELS, POST_STATUS_LABELS, type ActivityEntry, type CalendarResponse, type NotificationsResponse, type PostSummary } from '@the-pocket/shared';
 import { useAuth } from '../auth';
-import { Card } from '../ui';
+import { Alert, Card, secondaryButtonClass } from '../ui';
 
 export const CAPABILITY_LABELS: Record<string, string> = {
   'knowledge.view': 'Read approved marketing material',
@@ -25,130 +25,131 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   'audit.view': 'See the activity history',
 };
 
-interface Task {
-  to: string;
-  title: string;
-  text: string;
-  needs: string;
-  /** A count shown on the tile, when something is waiting. */
-  badge?: number;
+type OverviewData = {
+  reminders: NotificationsResponse;
+  posts: PostSummary[];
+  calendar: CalendarResponse;
+  activity: ActivityEntry[];
+};
+
+function dayKey(date: Date) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
-function TaskTile({ t, n }: { t: Task; n: number }) {
-  return (
-    <Link to={t.to} className="block rounded-lg bg-white p-5 shadow-sm ring-1 ring-stone-200 hover:ring-stone-400">
-      <p className="flex items-center gap-2 font-medium">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-xs text-white">{n}</span>
-        {t.title}
-        {!!t.badge && <span className="rounded-full bg-amber-100 px-2 text-xs text-amber-800">{t.badge} waiting</span>}
-      </p>
-      <p className="mt-1 text-sm text-stone-600">{t.text}</p>
-    </Link>
-  );
-}
+const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, {
+  timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric',
+});
 
 export function Home() {
   const { me, apiFetch } = useAuth();
-  const [health, setHealth] = useState<'checking' | 'ok' | 'down'>('checking');
-  const [posts, setPosts] = useState<PostSummary[]>([]);
-  const [reminders, setReminders] = useState<NotificationsResponse | null>(null);
+  const [state, setState] = useState<{ data?: OverviewData; error?: boolean }>({});
+  const [attempt, setAttempt] = useState(0);
+  const canRead = me?.capabilities.includes('content.view') ?? false;
 
   useEffect(() => {
-    apiFetch('/health')
-      .then((r) => setHealth(r.ok ? 'ok' : 'down'))
-      .catch(() => setHealth('down'));
-    apiFetch('/api/notifications')
-      .then(async (r) => r.ok && setReminders((await r.json()) as NotificationsResponse))
-      .catch(() => {});
-  }, [apiFetch]);
-
-  useEffect(() => {
-    if (!me?.capabilities.includes('content.view')) return;
-    apiFetch('/api/posts')
-      .then(async (r) => r.ok && setPosts(((await r.json()) as { posts: PostSummary[] }).posts))
-      .catch(() => {});
-  }, [apiFetch, me]);
+    let current = true;
+    async function get<T>(path: string): Promise<T> {
+      const response = await apiFetch(path);
+      if (!response.ok) throw new Error('Overview request failed');
+      return response.json() as Promise<T>;
+    }
+    const now = new Date();
+    const from = dayKey(now);
+    const to = dayKey(new Date(now.getTime() + 15 * 86400000));
+    async function load() {
+      try {
+        const [reminders, posts, calendar, activity] = await Promise.all([
+          get<NotificationsResponse>('/api/notifications'),
+          canRead ? get<{ posts: PostSummary[] }>('/api/posts') : { posts: [] },
+          canRead ? get<CalendarResponse>(`/api/calendar?from=${from}&to=${to}`) : { posts: [], facts: [], unscheduled: [] },
+          canRead ? get<{ activity: ActivityEntry[] }>('/api/activity?limit=5') : { activity: [] },
+        ]);
+        if (current) setState({ data: { reminders, posts: posts.posts, calendar, activity: activity.activity } });
+      } catch {
+        if (current) setState({ error: true });
+      }
+    }
+    void load();
+    return () => { current = false; };
+  }, [apiFetch, canRead, attempt]);
 
   if (!me) return null;
-  const can = (c: string) => me.capabilities.includes(c);
-  const waiting = posts.filter((p) => p.status === 'in_review').length;
-  const ready = posts.filter((p) => p.status === 'approved').length;
-  const needsWork = posts.filter((p) => (p.status === 'changes_requested' || p.status === 'rejected') && p.createdBy.id === me.userId).length;
-
-  const tasks: Task[] = [
-    { to: '/assistant', title: 'Ask the marketing assistant', text: "Practical answers grounded in The Pocket's approved brand and strategy, with sources.", needs: 'assistant.use' },
-    { to: '/create', title: 'Create a post', text: 'Choose locals or visitors, a channel and a goal; get on-brand options and a photo plan.', needs: 'content.draft' },
-    {
-      to: '/posts',
-      title: can('post.approve') ? 'Review and approve' : 'Your posts',
-      text: can('post.approve') ? 'Check the exact text, then approve, ask for changes or decline.' : 'Drafts, posts waiting for approval, and feedback from reviewers.',
-      needs: 'content.view',
-      badge: can('post.approve') ? waiting : needsWork,
-    },
-    { to: '/ready', title: 'Ready to post', text: 'Copy the approved text, post it yourself, and record it.', needs: 'post.record', badge: ready },
-    {
-      to: can('interview.conduct') ? '/interviews' : '/knowledge',
-      title: 'Keep the brand right',
-      text: can('brand.approve') ? 'Approve brand rules and facts, check what is expiring, run brand interviews.' : 'Approved brand rules and facts, and brand interviews with management.',
-      needs: 'knowledge.view',
-    },
+  const can = (capability: string) => me.capabilities.includes(capability);
+  const data = state.data;
+  const unread = data?.reminders.notifications.filter((notification) => !notification.read).slice(0, 5) ?? [];
+  const upcoming = data?.calendar.posts.filter((post) => post.status !== 'posted' && post.status !== 'archived')
+    .sort((left, right) => left.scheduledFor.localeCompare(right.scheduledFor)).slice(0, 5) ?? [];
+  const facts = data?.calendar.facts.slice(0, 5) ?? [];
+  const counts = [
+    { label: 'Pending approvals', status: 'in_review', to: '/posts?filter=review' },
+    { label: 'Unsubmitted drafts', status: 'draft', to: '/posts?filter=work' },
+    { label: 'Approved without source blockers', status: 'approved', to: can('post.record') ? '/ready' : '/posts?filter=ready' },
   ];
-  const mine = tasks.filter((t) => can(t.needs));
-  const unread = (reminders?.notifications ?? []).filter((n) => !n.read).slice(0, 4);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Hello, {me.name}</h1>
-        <p className="text-stone-600">{ROLE_DESCRIPTIONS[me.role]}</p>
-      </div>
-
-      {unread.length > 0 && (
-        <Card title="Needs you today">
-          <ul className="space-y-2">
-            {unread.map((n) => (
-              <li key={n.id}>
-                <Link to={n.link} className="text-sm font-medium underline">
-                  {n.title}
+      <header className="rounded-xl bg-stone-900 px-6 py-8 text-stone-50 sm:px-9">
+        <h1 className="text-3xl sm:text-4xl">Marketing overview</h1>
+        <p className="mt-2 text-sm text-stone-100">Welcome, {me.name}. Check what needs attention and prepare what comes next.</p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {can('content.draft') && <Link className={secondaryButtonClass} to="/create">Create content</Link>}
+          {can('assistant.use') && <Link className={secondaryButtonClass} to="/assistant">Ask AI Advisor</Link>}
+          {can('knowledge.view') && <Link className={secondaryButtonClass} to="/knowledge">Browse Brand Studio</Link>}
+        </div>
+      </header>
+      {state.error && <Alert kind="error">Could not load overview. <button className="underline" onClick={() => { setState({}); setAttempt((value) => value + 1); }}>Try again</button></Alert>}
+      {!state.error && !data && <p role="status" className="text-sm text-stone-600">Loading marketing activity…</p>}
+      {data && (
+        <>
+          {canRead && (
+            <section aria-label="Recent content" className="grid gap-3 sm:grid-cols-3">
+              {counts.map(({ label, status, to }) => (
+                <Link key={status} to={to} className="rounded-xl border border-stone-200 bg-white p-4 hover:border-stone-400">
+                  <span className="block font-serif text-3xl text-stone-900">{data.posts.filter((post) => post.status === status && (status !== 'approved' || !post.blockers.length)).length}</span>
+                  <span className="text-sm">{label}</span>
                 </Link>
-                <p className="text-xs text-stone-600">{n.body}</p>
-              </li>
-            ))}
-          </ul>
-          {(reminders?.unread ?? 0) > unread.length && (
-            <Link to="/reminders" className="mt-3 inline-block text-sm underline">
-              See all {reminders!.unread} reminders
-            </Link>
+              ))}
+            </section>
           )}
-        </Card>
+          <div className="grid gap-5 xl:grid-cols-2">
+            <Card title="Needs attention">
+              {unread.length ? <ul className="divide-y divide-stone-200">{unread.map((notification) => (
+                <li key={notification.id} className="py-2">
+                  <Link to={notification.link} className="text-sm font-semibold underline-offset-4 hover:underline">{notification.title}</Link>
+                  <p className="text-sm text-stone-600">{notification.body}</p>
+                </li>
+              ))}</ul> : <p className="text-sm text-stone-600">You have no unread reminders.</p>}
+              <Link className="mt-3 inline-block text-sm underline underline-offset-4" to="/reminders">View reminders{data.reminders.unread ? ` (${data.reminders.unread} unread)` : ''}</Link>
+            </Card>
+            {canRead && <Card title="Upcoming marketing">
+              {upcoming.length ? <ul className="divide-y divide-stone-200">{upcoming.map((post) => (
+                <li key={post.itemId} className="flex justify-between gap-3 py-2 text-sm">
+                  <div><Link className="font-semibold hover:underline" to={`/posts/${post.itemId}`}>{post.title}</Link>
+                    <p className="text-stone-600">{POST_STATUS_LABELS[post.status]}</p></div>
+                  <span className="shrink-0 text-stone-600">{formatDate(post.scheduledFor)}</span>
+                </li>
+              ))}</ul> : <p className="text-sm text-stone-600">No upcoming content is scheduled.</p>}
+              <Link className="mt-3 inline-block text-sm underline underline-offset-4" to="/calendar">Open Marketing Calendar</Link>
+            </Card>}
+            {canRead && <Card title="Expiring facts">
+              {facts.length ? <ul className="divide-y divide-stone-200">{facts.map((fact) => (
+                <li key={fact.itemId} className="flex justify-between gap-3 py-2 text-sm">
+                  <Link to="/knowledge?kind=fact" className="font-semibold hover:underline">{fact.title}</Link>
+                  <span className="shrink-0 text-stone-600">{formatDate(fact.expiresAt)}</span>
+                </li>
+              ))}</ul> : <p className="text-sm text-stone-600">No fact expirations in the upcoming calendar window.</p>}
+            </Card>}
+            {canRead && <Card title="Recent activity">
+              {data.activity.length ? <ul className="divide-y divide-stone-200">{data.activity.map((entry) => (
+                <li key={entry.id} className="py-2 text-sm">
+                  <Link className="font-semibold hover:underline" to={`/posts/${entry.itemId}`}>{entry.postTitle}</Link>
+                  <p className="text-stone-600">{APPROVAL_EVENT_LABELS[entry.event] ?? entry.event} · {formatDate(entry.at)}</p>
+                </li>
+              ))}</ul> : <p className="text-sm text-stone-600">No recent content activity.</p>}
+            </Card>}
+          </div>
+        </>
       )}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {mine.map((t, i) => (
-          <TaskTile key={t.to + t.title} t={t} n={i + 1} />
-        ))}
-        {can('content.view') && (
-          <Link to="/photo-guide" className="block rounded-lg border border-dashed border-stone-300 p-5 hover:border-stone-500">
-            <p className="font-medium">Photo guide</p>
-            <p className="text-sm text-stone-600">How to take restaurant photos with a phone that look like The Pocket.</p>
-          </Link>
-        )}
-      </div>
-
-      <Card title="What you can do">
-        <ul className="list-disc space-y-1 pl-5 text-sm">
-          {me.capabilities.map((c) => (
-            <li key={c}>{CAPABILITY_LABELS[c] ?? c}</li>
-          ))}
-        </ul>
-        <p className="mt-3 text-xs text-stone-500">For information only. The server checks your permissions on every action.</p>
-        <p className="mt-4 text-sm">
-          Server status:{' '}
-          <span className={health === 'ok' ? 'text-green-700' : health === 'down' ? 'text-red-700' : 'text-stone-500'}>
-            {health === 'ok' ? 'connected' : health === 'down' ? 'not reachable' : 'checking…'}
-          </span>
-        </p>
-      </Card>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { KNOWLEDGE_KIND_LABELS, type AskResponse, type AssistantStatus, type KnowledgeKind, type SourceRef } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
@@ -26,58 +27,79 @@ const EXAMPLES = [
 const kindName = (k: string) => KNOWLEDGE_KIND_LABELS[k as KnowledgeKind]?.name ?? k;
 
 export function Assistant() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, me } = useAuth();
+  const canDraft = me?.capabilities.includes('content.draft') ?? false;
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<ConversationSummary[]>([]);
 
   const loadHistory = useCallback(async () => {
     const res = await apiFetch('/api/assistant/conversations');
-    if (res.ok) setHistory(((await res.json()) as { conversations: ConversationSummary[] }).conversations);
+    if (!res.ok) throw new Error(await readError(res));
+    setHistory(((await res.json()) as { conversations: ConversationSummary[] }).conversations);
   }, [apiFetch]);
 
   useEffect(() => {
-    void apiFetch('/api/assistant/status').then(async (r) => r.ok && setStatus((await r.json()) as AssistantStatus));
-    void loadHistory();
+    void apiFetch('/api/assistant/status')
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Assistant status unavailable');
+        setStatus((await res.json()) as AssistantStatus);
+      })
+      .catch(() => setError('Could not check whether the advisor is available.'));
+    void loadHistory().catch(() => setError('Could not load conversation history.'));
   }, [apiFetch, loadHistory]);
 
   async function openConversation(id: string) {
-    const res = await apiFetch(`/api/assistant/conversations/${id}`);
-    if (!res.ok) return setError(await readError(res));
-    const { messages } = (await res.json()) as { messages: { role: string; content: string; sources: SourceRef[] }[] };
-    const t: Turn[] = [];
-    for (let i = 0; i + 1 < messages.length; i += 2) {
-      t.push({ question: messages[i]!.content, answer: messages[i + 1]!.content, sources: messages[i + 1]!.sources ?? [] });
+    if (busy || opening) return;
+    setOpening(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/assistant/conversations/${id}`);
+      if (!res.ok) return setError(await readError(res));
+      const { messages } = (await res.json()) as { messages: { role: string; content: string; sources: SourceRef[] }[] };
+      const restored: Turn[] = [];
+      for (let i = 0; i + 1 < messages.length; i += 2) {
+        restored.push({ question: messages[i]!.content, answer: messages[i + 1]!.content, sources: messages[i + 1]!.sources ?? [] });
+      }
+      setTurns(restored);
+      setConversationId(id);
+    } catch {
+      setError('Could not open that conversation. Try again.');
+    } finally {
+      setOpening(false);
     }
-    setTurns(t);
-    setConversationId(id);
   }
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (question.trim().length < 3) return;
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (busy || opening || question.trim().length < 3 || !status?.available) return;
     setBusy(true);
     setError(null);
-    const res = await apiFetch('/api/assistant/ask', { method: 'POST', body: { question, conversationId } });
-    if (res.ok) {
+    try {
+      const res = await apiFetch('/api/assistant/ask', { method: 'POST', body: { question, conversationId } });
+      if (!res.ok) return setError(await readError(res));
       const out = (await res.json()) as AskResponse;
-      setTurns((t) => [...t, { question, answer: out.answer, sources: out.sources, consulted: out.consulted }]);
-      if (!conversationId) void loadHistory();
+      setTurns((previous) => [...previous, { question, answer: out.answer, sources: out.sources, consulted: out.consulted }]);
       setConversationId(out.conversationId);
       setQuestion('');
-    } else setError(await readError(res));
-    setBusy(false);
+      if (!conversationId) void loadHistory().catch(() => setError('The reply was saved, but the history could not refresh.'));
+    } catch {
+      setError('Could not send the question. Try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_16rem]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="space-y-4">
         <div>
-          <h1 className="text-2xl font-semibold">Ask the marketing assistant</h1>
+          <h1 className="text-2xl font-semibold">AI Advisor</h1>
           <p className="text-sm text-stone-600">
             Answers use The Pocket's approved brand rules, facts and strategy. Always check anything marked "Please confirm" before acting.
           </p>
@@ -99,9 +121,9 @@ export function Assistant() {
 
         {turns.map((t, i) => (
           <div key={i} className="space-y-3">
-            <p className="ml-auto max-w-prose rounded-lg bg-stone-900 px-4 py-2 text-white">{t.question}</p>
+            <p className="ml-auto max-w-prose break-words rounded-lg bg-stone-900 px-4 py-2 text-white">{t.question}</p>
             <div className="max-w-prose rounded-lg bg-white p-4 shadow-sm ring-1 ring-stone-200">
-              <p className="whitespace-pre-wrap text-sm">{t.answer}</p>
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{t.answer}</p>
               {t.sources.length > 0 ? (
                 <details className="mt-3 text-sm" open>
                   <summary className="cursor-pointer font-medium">Sources ({t.sources.length})</summary>
@@ -121,11 +143,21 @@ export function Assistant() {
               ) : (
                 <p className="mt-3 text-xs text-stone-500">No approved source was cited. Treat this as general advice.</p>
               )}
+              {canDraft && (
+                <Link to="/create" state={{ topic: t.question.slice(0, 1000) }} className="mt-3 inline-block text-sm underline underline-offset-4">
+                  Draft content from this question
+                </Link>
+              )}
               {t.consulted && t.consulted.length > 0 && (
                 <details className="mt-2 text-xs text-stone-500">
                   <summary className="cursor-pointer">What the assistant was given ({t.consulted.length})</summary>
                   <ul className="mt-1 list-disc pl-5">
-                    {t.consulted.map((c, j) => (
+                    {canDraft && (
+                <Link to="/create" state={{ topic: t.question.slice(0, 1000) }} className="mt-3 inline-block text-sm underline underline-offset-4">
+                  Draft content from this question
+                </Link>
+              )}
+              {t.consulted.map((c, j) => (
                       <li key={j}>
                         {c.title} ({kindName(c.kind)}
                         {c.core ? ', brand core' : ''})
@@ -138,8 +170,10 @@ export function Assistant() {
           </div>
         ))}
 
-        <form onSubmit={submit} className="space-y-2">
+        <form onSubmit={submit} className="sticky bottom-0 space-y-2 rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm">
           <textarea
+            aria-label="Marketing question"
+            disabled={busy || opening}
             className={`${inputClass} min-h-24`}
             placeholder="Ask a marketing question…"
             value={question}
@@ -148,14 +182,17 @@ export function Assistant() {
           />
           {error && <Alert kind="error">{error}</Alert>}
           <div className="flex gap-2">
-            <button className={buttonClass} disabled={busy || question.trim().length < 3 || status?.available === false}>
+            <button className={buttonClass} disabled={busy || opening || question.trim().length < 3 || !status?.available}>
               {busy ? 'Thinking…' : 'Ask'}
             </button>
-            {turns.length > 0 && (
+            {(conversationId || question) && (
               <button
                 type="button"
                 className={secondaryButtonClass}
+                disabled={busy || opening}
                 onClick={() => {
+                  setError(null);
+                  setQuestion('');
                   setTurns([]);
                   setConversationId(undefined);
                 }}
@@ -167,7 +204,7 @@ export function Assistant() {
         </form>
       </div>
 
-      <aside className="space-y-2">
+      <aside className="self-start space-y-2 rounded-xl border border-stone-200 bg-white p-4">
         <h2 className="text-sm font-medium text-stone-600">Your recent conversations</h2>
         {history.length === 0 && <p className="text-sm text-stone-500">None yet.</p>}
         <ul className="space-y-1">
@@ -175,6 +212,8 @@ export function Assistant() {
             <li key={c.id}>
               <button
                 className={`w-full truncate rounded px-2 py-1 text-left text-sm hover:bg-stone-100 ${c.id === conversationId ? 'bg-stone-200' : ''}`}
+                aria-current={c.id === conversationId ? 'true' : undefined}
+                disabled={busy || opening}
                 onClick={() => void openConversation(c.id)}
               >
                 {c.title}

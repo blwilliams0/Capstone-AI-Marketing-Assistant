@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router';
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   KNOWLEDGE_KIND_LABELS,
@@ -26,7 +27,9 @@ const fmt = (iso: string) => new Date(iso).toLocaleString();
 
 export function Knowledge() {
   const { me, apiFetch } = useAuth();
-  const [kind, setKind] = useState<KnowledgeKind>('brand_rule');
+  const [params, setParams] = useSearchParams();
+  const selectedKind = params.get('kind');
+  const kind = KNOWLEDGE_KINDS.find((value) => value === selectedKind) ?? 'brand_rule';
   const [items, setItems] = useState<KnowledgeItemView[] | null>(null);
   const [core, setCore] = useState<BrandCore | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,14 +70,14 @@ export function Knowledge() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">The Pocket's knowledge</h1>
+          <h1 className="text-2xl font-semibold">Brand Studio</h1>
           <p className="text-sm text-stone-600">
             Only approved, current items are used by the assistant. Proposals wait here until an administrator approves the exact wording.
           </p>
         </div>
         {canPropose && (
           <button className={buttonClass} onClick={() => setAdding(!adding)}>
-            {adding ? 'Close' : 'Add something'}
+            {adding ? 'Close' : 'New proposal'}
           </button>
         )}
       </div>
@@ -100,8 +103,9 @@ export function Knowledge() {
       <div className="flex flex-wrap gap-2 border-b border-stone-200">
         {KNOWLEDGE_KINDS.map((k) => (
           <button
+            aria-pressed={k === kind}
             key={k}
-            onClick={() => setKind(k)}
+            onClick={() => setParams({ kind: k })}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${k === kind ? 'border-stone-900 font-medium' : 'border-transparent text-stone-600'}`}
           >
             {KNOWLEDGE_KIND_LABELS[k].name}
