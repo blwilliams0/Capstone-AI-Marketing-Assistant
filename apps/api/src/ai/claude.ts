@@ -101,7 +101,14 @@ export function createClaudeAiProvider(client: ClaudeClient): AiProvider {
           inference_geo: 'us',
           output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
           system: [{ type: 'text', text: req.system, cache_control: { type: 'ephemeral' } }],
-          messages: [{ role: 'user', content: [...toDocumentBlocks(req.documents, false), { type: 'text', text: req.prompt }] }],
+          messages: [{ role: 'user', content: [
+            ...toDocumentBlocks(req.documents, false),
+            ...(req.images ?? []).map((image) => ({
+              type: 'image' as const,
+              source: { type: 'base64' as const, media_type: image.mediaType, data: Buffer.from(image.bytes).toString('base64') },
+            })),
+            { type: 'text', text: req.prompt },
+          ] }],
         },
         long ? { timeout: 300_000, maxRetries: 1 } : undefined,
       );

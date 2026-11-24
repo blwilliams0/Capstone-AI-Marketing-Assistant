@@ -5,3 +5,4 @@ export * from './assistant.js';
 export * from './content.js';
 export * from './interview.js';
 export * from './calendar.js';
+export * from './visual.js';

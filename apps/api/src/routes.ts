@@ -13,6 +13,7 @@ import { addCalendarRoutes } from './calendar/routes.js';
 import type { AiProvider } from './ai/provider.js';
 import type { MediaStore } from './media/store.js';
 import { addMediaRoutes } from './media/routes.js';
+import { addVisualRoutes } from './media/visual.js';
 
 export interface RouteDeps {
   db: Db;
@@ -199,6 +200,7 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
   addContentRoutes(r, db, deps.media);
   addCalendarRoutes(r, db);
   addMediaRoutes(r, db, deps.media);
+  addVisualRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
   addInterviewRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
   addAssistantRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
 

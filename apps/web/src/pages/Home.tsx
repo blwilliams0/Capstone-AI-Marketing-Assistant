@@ -99,6 +99,7 @@ export function Home() {
           {can('content.draft') && <Link className={secondaryButtonClass} to="/create">Create content</Link>}
           {can('assistant.use') && <Link className={secondaryButtonClass} to="/assistant">Ask AI Advisor</Link>}
           {can('knowledge.view') && <Link className={secondaryButtonClass} to="/knowledge">Browse Brand Studio</Link>}
+          {can('content.draft') && <Link className={secondaryButtonClass} to="/visual">Open Visual Studio</Link>}
         </div>
       </header>
       {state.error && <Alert kind="error">Could not load overview. <button className="underline" onClick={() => { setState({}); setAttempt((value) => value + 1); }}>Try again</button></Alert>}

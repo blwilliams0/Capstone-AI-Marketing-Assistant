@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { KNOWLEDGE_KIND_LABELS, type AskResponse, type AssistantStatus, type KnowledgeKind, type SourceRef } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, buttonClass, inputClass, secondaryButtonClass } from '../ui';
+import { VisualWorkspace } from './VisualStudio';
 
 interface Turn {
   question: string;
@@ -204,6 +205,10 @@ export function Assistant() {
         </form>
       </div>
 
+      {__MOCK_AUTH__ && canDraft && <details className="order-last rounded-lg border border-studio-linen bg-studio-pearl p-4 xl:col-span-2">
+        <summary className="cursor-pointer font-semibold">Review photos in AI Advisor</summary>
+        <div className="mt-4"><VisualWorkspace advisor /></div>
+      </details>}
       <aside className="self-start space-y-2 rounded-xl border border-stone-200 bg-white p-4">
         <h2 className="text-sm font-medium text-stone-600">Your recent conversations</h2>
         {history.length === 0 && <p className="text-sm text-stone-500">None yet.</p>}

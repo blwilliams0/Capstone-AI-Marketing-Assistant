@@ -32,7 +32,7 @@ export const supabase: SupabaseClient | null =
 
 type Status = 'loading' | 'signed_out' | 'needs_password' | 'ready' | 'no_access' | 'error';
 
-type ApiOptions = { method?: string; body?: unknown };
+type ApiOptions = { method?: string; body?: unknown; headers?: Record<string, string> };
 
 interface AuthState {
   status: Status;
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const apiFetch = useCallback(async (path: string, init?: ApiOptions) => {
     const token = await currentToken();
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...init?.headers };
     if (token) headers.Authorization = `Bearer ${token}`;
     const body = init?.body;
     if (body !== undefined) headers['Content-Type'] = body instanceof Blob ? body.type : 'application/json';

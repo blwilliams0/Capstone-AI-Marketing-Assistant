@@ -15,7 +15,7 @@ export function estimateCostUsd(u: AiUsage, provider: 'anthropic' | 'mock'): num
   return Math.round(cost * 1_000_000) / 1_000_000;
 }
 
-export type AiTask = 'answer' | 'draft' | 'interview' | 'extract';
+export type AiTask = 'answer' | 'draft' | 'interview' | 'extract' | 'photo_review';
 export type AiOutcome = 'ok' | 'refused' | 'error' | 'blocked_budget';
 
 export async function recordUsage(

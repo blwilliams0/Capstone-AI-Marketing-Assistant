@@ -9,6 +9,7 @@ import { Reminders } from './pages/Reminders';
 import { Interview } from './pages/Interview';
 import { Interviews } from './pages/Interviews';
 import { PostDetail } from './pages/PostDetail';
+import { VisualStudio } from './pages/VisualStudio';
 import { Posts } from './pages/Posts';
 import { ReadyToPost } from './pages/ReadyToPost';
 import { Draft } from './pages/Draft';
@@ -50,6 +51,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route index element={<Home />} />
             <Route path="assistant" element={<Assistant />} />
+            <Route path="visual" element={<VisualStudio />} />
             <Route path="create" element={<Draft />} />
             <Route path="posts" element={<Posts />} />
             <Route path="posts/:itemId" element={<PostDetail />} />
