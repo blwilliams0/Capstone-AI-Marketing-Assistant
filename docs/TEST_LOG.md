@@ -434,3 +434,19 @@ On the local PostgreSQL preview, an HTTP smoke test exercised the mock Advisor, 
 The isolated feature-branch run passed build, typecheck, lint, tests and the bundle check. Tests reported 223 passes (shared 7, database 63, API 144, worker 9). The added test verifies duplicate finalization, user and restaurant isolation, normalized image bytes reaching a mock provider, derivative lineage and usage recording.
 
 Cloud Chrome showed explicit dark foreground and pearl background on the Overview action. A contributor uploaded a fictional photo through the file picker, saw the simulated review, saved a square crop, downloaded a decoded 250×250 PNG from the 400×250 source, and added the edit to Feed Planner. A local PostgreSQL/API smoke test attached the edited image to an approved draft and verified the previous approval was superseded. Browser checks covered desktop contributor mode. Dedicated mobile, macOS, live Supabase and live Claude runs were outside this verification pass.
+
+## Marketing Studio Phase 2
+
+Starting checkpoint: `97b5b82`. Verification used isolated practice configuration and fictional data.
+
+| Command | Result |
+| --- | --- |
+| `npm run build` | Passed |
+| `npm run typecheck` | Passed |
+| `npm run lint` | Passed |
+| `npm test` | 226 passed across shared (7), database (63), worker (9), and API (147) |
+| `npm run check:bundle` | Passed, 8 files checked |
+
+New integration coverage exercises collection visibility, per-photo access, revocation, feed ordering and stale revisions, exact visual standard eligibility, mock image inputs, relative recipe recommendations, preference and feedback isolation, and stored review retrieval. Existing content and exact-version approval suites passed.
+
+Cloud Chromium verification covered the practice role chooser, administrator sign-in, name and operational data on Overview, photo and prompt transfer into Advisor, rendering a warmth increase, requesting a relative reduction, saving and reopening a derivative with its source link, and reordering and reopening a named private feed layout after reload. A separate browser file download and pixel-level comparison of exported files were outside this run. Other roles, macOS, mobile, Safari, live Claude, and shared Supabase were outside this run.

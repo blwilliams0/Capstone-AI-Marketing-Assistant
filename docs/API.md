@@ -114,3 +114,18 @@ Routes are added only through `PolicyRouter` in `apps/api/src/policy.ts`, which 
 | `POST /api/visual/assets` | `content.draft` | JPEG, PNG or WebP bytes with `X-Photo-Id` UUID and URL-encoded `X-Photo-Label`. Optional paired `X-Photo-Parent` UUID and `X-Photo-Edits` JSON preserve immutable derivative lineage. An identical retry returns the existing asset. |
 | `GET /api/visual/assets/:id/image` | `content.draft` | Returns private full image bytes or `?size=thumb` WebP for the owner. |
 | `POST /api/visual/review` | `assistant.use` and `content.draft` | Accepts one to three owned IDs and explicit privacy confirmation. Records usage and returns a simulated structured result in practice mode. Live providers are disabled here. |
+
+## Phase 2 creative workspace
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/visual/collections?kind=album\|feed` | Lists tenant collections visible to the caller. Feed items are filtered by the caller’s independent media access. |
+| `POST /api/visual/collections[?id=UUID]` | Creates or replaces an owned collection. Send the current revision for updates. A stale revision returns 409. Sharing an album can grant access to its owner’s photos. Sharing a feed grants access only to the layout. |
+| `GET /api/visual/standards` | Lists eligible approved references and presets, with proposal management data where authorized. |
+| `POST /api/visual/standards` | Proposes or revises a versioned visual reference or preset. Approval uses the existing exact-version knowledge decision endpoint. |
+| `POST /api/visual/edit-advice` | Produces a bounded simulated recipe from a selected accessible asset, the current recipe, and instructions. Requires image-use confirmation and mock mode. |
+| `POST /api/visual/review` and `GET /api/visual/reviews?assetId=UUID` | Runs a simulated review and stores its exact asset IDs and structured result. History is scoped to the person who ran the review. |
+| `GET /api/assistant/preferences` and `POST /api/assistant/preferences` | Reads or sets the current account’s opt-in response detail and workflow preferences. Disabling memory removes the active preference record. |
+| `POST /api/assistant/feedback` | Records private feedback against an owned conversation or photo review. It has no effect on approvals or future context. |
+
+Migrations 012–014 add tenant-scoped collections and memberships, versioned visual metadata, and private review, preference, and feedback records. A saved derivative retains its recipe and immediate source. Visual context includes bounded approved metadata. References also require current image access.

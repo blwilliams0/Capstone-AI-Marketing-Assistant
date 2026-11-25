@@ -146,3 +146,17 @@ A Fable photo-upload review and a project-wide bug hunt found no demo blockers. 
 - The cost figures are estimates from published prices; the Anthropic invoice is authoritative.
 - 7 moderate advisories remain in `typescript-eslint` (development-only lint tool).
 - Test suites run one package at a time (`--concurrency=1`) and API/db tests use 2 workers: running more in parallel crashed Windows test processes (memory used by in-process Postgres).
+
+## Marketing Studio Phase 2
+
+Practice mode now includes role selection, a personalized Advisor entry point, governed media albums, approved visual examples and presets, simulated photo recommendations, source-aware photo editing, and named Feed Preview layouts. Personal preferences are private and optional. Structured review and feedback records retain provenance. General Advisor retrieval keeps its existing approved text sources. The photo editor selects eligible visual metadata separately. See [the evaluation plan](AI_EVALUATION.md) for the remaining quality checks.
+
+Pending work includes approved reference image inputs for live evaluation, cross-workflow conversation continuity, a management workflow for promoting feedback into proposals, and feed-wide composition analysis. Existing organization knowledge remains the approved source of brand rules. Production integration and authorization of any live AI evaluation remain open.
+
+### M5 measurement and export
+
+Track approved post counts, approval turnaround, edit and rejection counts, manual KPI entry, approved brand reference exports, and marketing activity report exports. Keep missing measurements distinct from actual zero values. Existing version, approval and audit records are inputs to this work. Reservation interest, repeat visits, private-event inquiries and referrals require reliable source data before reporting outcomes or attribution.
+
+### M6 hardening and handoff
+
+Coordinate ownership and migration numbers before starting overlapping implementation. The new collection sharing rules, historical recipes, image processing, exact-version approval, retention and preferred context require security and end-to-end review. Production integration verification, deployment, staff documentation, administrator documentation, and operational and client handoff remain milestone work.
