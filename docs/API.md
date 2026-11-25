@@ -129,3 +129,16 @@ Routes are added only through `PolicyRouter` in `apps/api/src/policy.ts`, which 
 | `POST /api/assistant/feedback` | Records private feedback against an owned conversation or photo review. It has no effect on approvals or future context. |
 
 Migrations 012–014 add tenant-scoped collections and memberships, versioned visual metadata, and private review, preference, and feedback records. A saved derivative retains its recipe and immediate source. Visual context includes bounded approved metadata. References also require current image access.
+
+## Phase 3 creative and learning routes
+
+| Route | Authorization and behavior |
+| --- | --- |
+| `POST /api/visual/collections/:id/archive` | Management only. Requires the current album revision. Archiving hides the album and ends grants from it while preserving the photo files and memberships. Returns 409 for a stale revision. |
+| `POST /api/visual/feed-review` | Requires Advisor and photo access. Practice only. Accepts two to nine distinct ordered photo IDs, existing-feed flags, and explicit photo privacy confirmation. Sends normalized grid crops to the configured mock and returns a validated simulated evaluation. No feed layout is modified. |
+| `POST /api/assistant/feedback/:id/propose` | Requires knowledge proposal permission and ownership of the source feedback. Explicit confirmation shares a newly written title, guidance and optional evidence. A retry of the same source returns the original proposal. The conversation and private feedback text stay private. The resulting brand rule is subject to existing knowledge version review. |
+| `GET /api/assistant/learnings` | Management only. Supplies the most recent 100 learning proposal item IDs for the Brand Studio management filter. Content and version decisions use the existing knowledge API. |
+
+Collection responses include `restaurantDefault`. Default albums are restaurant-owned and editable by management. They can include photos independently shared to their audience, and do not grant additional image access. Team access is checked again for approved reference images.
+
+Edit advice accepts up to three optional prior editing instructions, each at most 600 characters. It sends the subject image, current recipe, current and prior instructions, bounded approved knowledge and visual preset metadata to the configured provider. The mock path can also receive up to two eligible on-brand reference images. A separate live subject-photo API setting, `AI_LIVE_PHOTO_ADVICE`, defaults to false and requires real auth and a configured Claude provider. Live reference image transmission requires a separate authorization mechanism and is disabled. Practice auth always selects mock AI.

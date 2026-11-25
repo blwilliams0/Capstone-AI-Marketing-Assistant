@@ -1,14 +1,30 @@
 # Development Status
 
-Last updated: 2026-11-18 (M3). The M3 summary below is newest; the 2026-11-13 morning summary is kept for history. Labels: *working in test*, *live* (verified against the real dev Supabase project), *not yet verified*, *deferred*. Plan: `The_Pocket_AI_Architecture_Addendum_v0_4.md` §7.
+## Marketing Studio Phase 3 checkpoint
 
-## Studio visual checkpoint (2026-11-24)
+At a Glance is the authenticated root. The shared composer sends text directly to Advisor and can start a consented practice edit on an authorized attached photo. Navigation supports expanded, icon rail and focus modes, with browser preferences scoped to the account, and a small-screen disclosure menu. The existing brand asset path and sign-in identity are preserved. The SVG bowl is used during pending AI actions and has a static reduced-motion state.
+
+Migration 015 adds restaurant-owned default albums and revision-checked archiving. The ten default names are seeded for existing and future tenants with no fixture photos. Archiving retains the row and its memberships. Default albums only organize photos already authorized for the album's audience. Regular owner albums remain the explicit means of granting access.
+
+Staff can explicitly turn a private feedback record into a standalone proposed brand rule. The employee chooses what supporting text to share. Brand Studio can filter these proposals and uses the existing exact-version approval and retirement controls. The existing opt-in personal settings persist across conversations. Automatically suggesting recurring corrections, browsing private feedback as management, or creating preferences from conversation history are outside this checkpoint. Retention policy remains a handoff decision.
+
+Advisor's provider prompt supports ordinary conversation, and short follow-ups can recover approved sections from the prior question. Photo editing supplies bounded recent edit instructions and current recipe. Workflows still require explicit handoffs and have separate durable histories. A continuous thread across text, photo, feed and drafting remains to be implemented. The photo API has a default-off live subject-image pathway, while practice can supply eligible approved references to its mock. No live-provider quality findings were established.
+
+Feed Preview can open larger images and request a simulated review of authorized library photos in order. The review does not include manually recorded publications and is not persisted. An official Instagram connection, OAuth, scheduled or manual synchronization, stored external media, and mock synchronization fixtures remain to be implemented. The dedicated Brand consistency reviewer and cross-domain strategic synthesis with calendar or verified metrics remain open. See [developer handoff](DEVELOPER_HANDOFF.md) and [AI evaluation](AI_EVALUATION.md).
+
+M5 remains open. Full reporting requires server-side counts and measurements across the underlying approval/version events, so bounded Dashboard or Content lists are unsuitable as totals. Confirm the existing KPI schema and team assignments before work. Preserve unknown versus actual zero and distinguish observed outcomes from attribution. M6 remains open for production authentication and database migration verification, storage and revocation, backups, privacy and retention, live AI and OAuth checks, mobile and accessibility verification, staff and administrator materials, deployment, and client handoff.
+
+## Historical checkpoints
+
+The dated notes below record earlier branch and deployment states.
+
+### Studio visual checkpoint (2026-11-24)
 
 - The slate, taupe and ivory design uses locally bundled licensed Raleway and Cormorant Garamond. Buttons explicitly pair foreground and background. The supplied logo file still needs to be placed in the repository.
 - Migration 011 adds private immutable assets and derivative lineage. Local photo editing exports PNG pixels and keeps normalized source images. The preview supports private upload, library filtering, simulated photo comparison in Visual Studio and Advisor, practice attachment to drafts, and a browser-local Instagram plan alongside recorded posts.
 - Live photo evaluation and Supabase validation, approved visual references and presets, shared library workflow metadata, and the broader campaign, planning and measurement roadmap remain open. Coordinate migration numbering and future activity/performance changes with M5.
 
-## Studio feature branch (2026-11-24)
+### Studio feature branch (2026-11-24)
 
 - Shared palette and typography, responsive capability-aware sidebar, dedicated practice sign-in and direct approval queue link.
 - Overview uses current post state, reminders, activity and calendar dates. Advisor uses the existing private history and explicit handoff to the draft form. Brand Studio filters the existing approved knowledge categories.
@@ -17,7 +33,7 @@ Last updated: 2026-11-18 (M3). The M3 summary below is newest; the 2026-11-13 mo
 
 Follow-up review items: confirm whether an original approver's revoked access should block recording distribution (the architecture addendum calls for it), move complete reporting off the capped list endpoints, reconcile Pacific-time boundaries, and evaluate spend reservations for concurrent AI requests with the M5 owner. The Studio photo path keeps the caption's existing knowledge references until the text is reviewed and edited.
 
-## Morning summary (2026-11-13 run)
+### Morning summary (2026-11-13 run)
 
 **Done and committed locally (branch `stage1-remediation`, nothing pushed):**
 
@@ -44,7 +60,7 @@ Follow-up review items: confirm whether an original approver's revoked access sh
 - Assistant conversations are private to the person who asked (admins cannot read others' conversations).
 - AI budget default $25/month estimated spend (`AI_MONTHLY_BUDGET_USD`).
 
-## Feature status
+### Feature status
 
 | Capability | State | Evidence |
 |---|---|---|
@@ -64,18 +80,18 @@ Follow-up review items: confirm whether an original approver's revoked access sh
 | AI usage, cost estimate, monthly budget (fails closed) | Working in test | `ai.test.ts` |
 | Worker: durable queue | Working in test | `jobs.test.ts`, `worker.test.ts` |
 
-## Next (per plan)
+### Next (per plan)
 
 - **M3:** done 2026-11-18 (see M3 summary). Next: the Nov 23 prototype demo.
 - **M4:** in-app brand interview (question set from `docs/strategy/BRAND_INTERVIEW_GUIDE.md`), calendar and reminders, fact-expiry nudges, image upload.
 - **M5–M6:** measurement, export, security review, end-to-end test, deployment, guides.
 
-## Requested for later (owner, 2026-11-16; not in the prototype, possibly after the semester)
+### Requested for later (owner, 2026-11-16; not in the prototype, possibly after the semester)
 
 - **Administrators can read staff assistant conversations.** Today conversations are private to the asker. Staff should be told plainly that management can read them before this is turned on.
 - **Controlled guardrails** on what the assistant will discuss or draft (scope to be defined with management: for example topic limits, banned claims, escalation to a manager).
 
-## M4 summary (2026-11-18, same branch, committed locally after the M3 push)
+### M4 summary (2026-11-18, same branch, committed locally after the M3 push)
 
 **Built:**
 - **Brand interview in the app** (Interviews):
@@ -98,7 +114,7 @@ Follow-up review items: confirm whether an original approver's revoked access sh
 
 **Needs you:** nothing new to set up. Before the demo, optionally start a practice interview (with yourself, labelled "PRACTICE") to try the flow.
 
-## Reviews of 2026-11-21
+### Reviews of 2026-11-21
 
 A Fable photo-upload review and a project-wide bug hunt found no demo blockers. All demo-relevant findings are fixed (TEST_LOG §13). Known risks to handle later:
 
@@ -116,7 +132,7 @@ A Fable photo-upload review and a project-wide bug hunt found no demo blockers. 
 | No automated tests for the web screens | Ongoing | Playwright journey test (M6) |
 | Demo and practice data are permanent | Now | Name them "DEMO…" and "PRACTICE…": the AI ignores those posts' history and those interviews |
 
-## M3 summary (2026-11-18, branch `m3-approve-and-post`, not pushed)
+### M3 summary (2026-11-18, branch `m3-approve-and-post`, not pushed)
 
 **Built:**
 - **Posts:** save an assistant draft (or write one yourself), edit (each save is a new version), submit, and approve, ask for changes or decline.
@@ -137,7 +153,7 @@ A Fable photo-upload review and a project-wide bug hunt found no demo blockers. 
 
 **Costs, measured:** a question is about 4 cents and a draft about 8 cents (an earlier estimate of 5 cents was low). Total live spend so far: about $0.21.
 
-## Known limitations
+### Known limitations
 
 - Rate-limit counters are in memory (one API process). Fine for one restaurant; revisit if the API ever runs as several processes. Behind a hosting proxy, Express `trust proxy` must be set so limits see real client IPs (deployment task).
 - Mock sign-in is for UI checks only; actions that write to the database (knowledge, assistant) need real sign-in.
@@ -147,7 +163,7 @@ A Fable photo-upload review and a project-wide bug hunt found no demo blockers. 
 - 7 moderate advisories remain in `typescript-eslint` (development-only lint tool).
 - Test suites run one package at a time (`--concurrency=1`) and API/db tests use 2 workers: running more in parallel crashed Windows test processes (memory used by in-process Postgres).
 
-## Marketing Studio Phase 2
+### Marketing Studio Phase 2
 
 Practice mode now includes role selection, a personalized Advisor entry point, governed media albums, approved visual examples and presets, simulated photo recommendations, source-aware photo editing, and named Feed Preview layouts. Personal preferences are private and optional. Structured review and feedback records retain provenance. General Advisor retrieval keeps its existing approved text sources. The photo editor selects eligible visual metadata separately. See [the evaluation plan](AI_EVALUATION.md) for the remaining quality checks.
 

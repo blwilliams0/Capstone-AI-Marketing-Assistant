@@ -151,3 +151,21 @@ If you need them for your work, ask Blake. Don't commit client details to the re
 - **Marketing team:** owns the strategy documents in `docs/strategy/`.
 
 When you are unsure whether a change is allowed, ask before you build it.
+
+## Phase 3 practice and integration handoff
+
+- The existing launcher uses a loopback-only PostgreSQL cluster, applies pending migrations, and uses cached API builds. Keep local practice data by reusing the checkout and its ignored preview directory. [Practice preview](STUDIO_PREVIEW.md)
+- Confirm migration numbering with the team before integration. Phase 3 added 015 after the feature branch's migrations 012–014. The restaurant insert trigger and backfill run under the app database owner. Use a production-like staging role and test invitation, restaurant initialization, album archive, revocation through each media endpoint, and backup and restore in M6.
+- Personal preferences remain account scoped. Disabling personalization excludes saved preferences from prompts and clearing deletes the active record. Conversations, reviews and feedback have their own storage and existing retention behavior. Define deletion, audit retention, photo retention, and access after staff departure before live rollout.
+- Test provider timeouts, interrupted clients and concurrent spend. The UI can cancel waiting for a reply. The server may still finish, charge usage, and save it in history. The current estimated monthly guard does not reserve spend across concurrent requests. Failed requests may have unknown provider costs. Review distributed rate limiting, Pacific-time reporting boundaries, bounded lists, image size limits and queue/retry behavior before deployment.
+- For M5, reuse the approval, content-version and audit data model for counts, revisions, rejections and turnaround. Confirm analytics ownership and the manual KPI schema before adding storage or endpoints. Use verified outcomes only and carry their provenance and missing-value status into any future Advisor context.
+
+### Future read-only Instagram integration
+
+The application currently supports manual feed planning and manually recorded publications. There is no OAuth route, token store, sync worker, or active Meta configuration. Use the following plan once authorization is available.
+
+1. Obtain approval from the restaurant account manager and confirm the account is a supported Business or Creator profile. Select Meta's official Instagram API login product for that account. Verify the current version, read scopes, app review and account eligibility before registering anything.
+2. Configure an authorized Meta app with the application's exact deployed HTTPS callback and approved privacy policy and data-deletion instructions. Use the read-only basic access scope supported by the chosen product. For Instagram Login this starts with `instagram_business_basic`. Verify the current contract in Meta documentation before implementation. Request publication, messaging and moderation scopes only if separately required and authorized by a future feature.
+3. Implement management-only OAuth initiation with expiring one-time state tied to the session, tenant and account. Exchange and refresh tokens server-side. Keep encrypted tokens and secrets outside browser data and logs. Define access revocation, expiry handling and local deletion on disconnect.
+4. Add a read-only adapter that returns normalized media ID, type, timestamp and eligible cover previews. Test pagination, expired URLs, box sizes and layouts, expired authorization, throttling, retries and atomic last-success state with a fake client before live authorization. Keep the canonical list separate from hypothetical layouts and manually recorded posts. Recent media ordered by timestamp may differ from the public profile because of pinned posts, archived items, carousel cover selection and Reel covers.
+5. After review, authorize with the restaurant manager in staging, verify one read-only refresh and disconnect, and confirm retention and rate-limit behavior before production enablement. [Meta Instagram platform documentation](https://developers.facebook.com/docs/instagram-platform/)

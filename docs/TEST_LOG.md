@@ -450,3 +450,21 @@ Starting checkpoint: `97b5b82`. Verification used isolated practice configuratio
 New integration coverage exercises collection visibility, per-photo access, revocation, feed ordering and stale revisions, exact visual standard eligibility, mock image inputs, relative recipe recommendations, preference and feedback isolation, and stored review retrieval. Existing content and exact-version approval suites passed.
 
 Cloud Chromium verification covered the practice role chooser, administrator sign-in, name and operational data on Overview, photo and prompt transfer into Advisor, rendering a warmth increase, requesting a relative reduction, saving and reopening a derivative with its source link, and reordering and reopening a named private feed layout after reload. A separate browser file download and pixel-level comparison of exported files were outside this run. Other roles, macOS, mobile, Safari, live Claude, and shared Supabase were outside this run.
+
+## Marketing Studio Phase 3
+
+Baseline `3ecfafc` on `feat/marketing-studio`. Used isolated PostgreSQL, mock authentication, fictional photos and mock or spy AI.
+
+Desktop Chromium opened the administrator practice session. The personalized greeting had computed Cormorant Garamond, the composer used Raleway, and the workspace had no horizontal overflow at 1180 px. The browser verified rail persistence after reload, focus mode and restore, identity navigation, a greeting sent from At a Glance using Enter, the plus and photo menus, default albums in the photo picker, photo removal, keyboard privacy confirmation, and automatic practice edit advice after handoff. It rendered warmth at 0.12 and restored that recipe on the newly saved derivative. A named private feed layout reopened with the same photos. Its larger image dialog closed with Escape, and a three-photo practice grid review remained separate from the manually recorded publication.
+
+Chromium exported the edited JPEG and PNG and an unedited source PNG. Sharp decoded all three at 1120 × 760. Relative to the unedited source, the edited PNG's mean red and blue changes were +3.00 and −3.00. The JPEG changes were +3.28 and −2.86. This verifies output bytes, pixel adjustments, matching dimensions and the source link for the tested photo.
+
+The browser pass did not capture a pending response long enough to verify the animation lifecycle, cancellation or reduced motion. Mobile, Safari, macOS, the final learning proposal interface, drag-and-drop regression, and production integrations were outside the browser pass. Automated tests cover safe proposal approval and retrieval, authorization, and provider input ordering. The build retains Vite's large-chunk warning.
+
+| Repository check | Result |
+| --- | --- |
+| `npm run build` | Passed |
+| `npm run typecheck` | Passed |
+| `npm run lint` | Passed |
+| `npm test` | 230 passed across shared (7), database (63), worker (9), and API (151) |
+| `npm run check:bundle` | Passed, 8 files checked |
