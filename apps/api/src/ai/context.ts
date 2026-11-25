@@ -39,15 +39,21 @@ export async function buildContext(
   restaurantId: string,
   query: string,
   limits: ContextLimits = DEFAULT_LIMITS,
+  previousQuestion?: string,
 ): Promise<AiDocument[]> {
   const docs = await brandCoreDocuments(db, restaurantId);
-  const coreVersions = new Set(docs.map((d) => d.versionId));
+  const included = new Set(docs.map((d) => d.versionId));
   const hits = await searchSections(db, restaurantId, query, limits.maxSections * 2);
+  if (hits.length < 3 && previousQuestion) {
+    const fallback = await searchSections(db, restaurantId, previousQuestion, 3);
+    const primary = new Set(hits.map((hit) => hit.versionId + ':' + hit.heading));
+    hits.push(...fallback.filter((hit) => !primary.has(hit.versionId + ':' + hit.heading)));
+  }
   let used = 0;
   let added = 0;
   for (const h of hits) {
     if (added >= limits.maxSections) break;
-    if (coreVersions.has(h.versionId)) continue; // already included in full
+    if (included.has(h.versionId)) continue; // already included in full
     const tokens = estimateTokens(h.body);
     if (used + tokens > limits.sectionTokenBudget) continue;
     used += tokens;

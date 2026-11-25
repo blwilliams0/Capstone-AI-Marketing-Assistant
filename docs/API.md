@@ -63,7 +63,8 @@ The old `/api/qwen/*` and `/api/social/*` routes from the first draft were remov
 | `POST /api/posts/:itemId/media/upload-link` | `content.draft` | `{ contentType: image/jpeg, image/png or image/webp }` → one-time upload link for a fresh, server-chosen path. |
 | `POST /api/posts/:itemId/media` | `content.draft` | `{ path }` after uploading. The server downloads it, checks the real type and size (10 MB), fingerprints it (SHA-256) and saves a **new version**, so an approved post needs approval again. |
 | `POST /api/posts/:itemId/media/remove` | `content.draft` | New version without a photo. |
-| `GET /api/posts/:itemId/media?versionId=` | `content.view` | Short-lived (5 minute) link to view or download that version's photo. |
+| `GET /api/posts/:itemId/media?versionId=` | `content.view` | Short-lived link for Supabase photos. In the local practice workspace, returns the authorized version's image bytes with `Cache-Control: private, no-store`. |
+| `POST /api/posts/:itemId/media/practice` | `content.draft` | Development practice workspace only. Raw JPEG, PNG or WebP, up to 10 MB and 16 megapixels. The server decodes, normalizes and fingerprints the attachment and creates a post version. |
 
 **Brand interviews (M4a)**, all `interview.conduct` except saving a suggestion (`knowledge.propose`):
 - `GET` and `POST /api/interviews`, `GET /api/interviews/:sessionId`
@@ -104,3 +105,55 @@ Every response carries an `X-Request-Id` header that matches the server log line
 ## Adding a route
 
 Routes are added only through `PolicyRouter` in `apps/api/src/policy.ts`, which requires a permission argument. `rbac.test.ts` automatically tests every registered route against every role.
+
+### Private Visual Studio
+
+| Method and path | Capability | Behavior |
+| --- | --- | --- |
+| `GET /api/visual/assets` | `content.draft` | Lists the caller's studio assets inside the active restaurant. |
+| `POST /api/visual/assets` | `content.draft` | JPEG, PNG or WebP bytes with `X-Photo-Id` UUID and URL-encoded `X-Photo-Label`. Optional paired `X-Photo-Parent` UUID and `X-Photo-Edits` JSON preserve immutable derivative lineage. An identical retry returns the existing asset. |
+| `GET /api/visual/assets/:id/image` | `content.draft` | Returns private full image bytes or `?size=thumb` WebP for the owner. |
+| `POST /api/visual/review` | `assistant.use` and `content.draft` | Accepts one to three owned IDs and explicit privacy confirmation. Records usage and returns a simulated structured result in practice mode. Live providers are disabled here. |
+
+## Phase 2 creative workspace
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/visual/collections?kind=album\|feed` | Lists tenant collections visible to the caller. Feed items are filtered by the caller’s independent media access. |
+| `POST /api/visual/collections[?id=UUID]` | Creates or replaces an owned collection. Send the current revision for updates. A stale revision returns 409. Sharing an album can grant access to its owner’s photos. Sharing a feed grants access only to the layout. |
+| `GET /api/visual/standards` | Lists eligible approved references and presets, with proposal management data where authorized. |
+| `POST /api/visual/standards` | Proposes or revises a versioned visual reference or preset. Approval uses the existing exact-version knowledge decision endpoint. |
+| `POST /api/visual/edit-advice` | Produces a bounded simulated recipe from a selected accessible asset, the current recipe, and instructions. Requires image-use confirmation and mock mode. |
+| `POST /api/visual/review` and `GET /api/visual/reviews?assetId=UUID` | Runs a simulated review and stores its exact asset IDs and structured result. History is scoped to the person who ran the review. |
+| `GET /api/assistant/preferences` and `POST /api/assistant/preferences` | Reads or sets the current account’s opt-in response detail and workflow preferences. Disabling memory removes the active preference record. |
+| `POST /api/assistant/feedback` | Records private feedback against an owned conversation or photo review. It has no effect on approvals or future context. |
+
+Migrations 012–014 add tenant-scoped collections and memberships, versioned visual metadata, and private review, preference, and feedback records. A saved derivative retains its recipe and immediate source. Visual context includes bounded approved metadata. References also require current image access.
+
+## Phase 3 creative and learning routes
+
+| Route | Authorization and behavior |
+| --- | --- |
+| `POST /api/visual/collections/:id/archive` | Management only. Requires the current album revision. Archiving hides the album and ends grants from it while preserving the photo files and memberships. Returns 409 for a stale revision. |
+| `POST /api/visual/feed-review` | Requires Advisor and photo access. Practice only. Accepts two to nine distinct ordered photo IDs, existing-feed flags, and explicit photo privacy confirmation. Sends normalized grid crops to the configured mock and returns a validated simulated evaluation. No feed layout is modified. |
+| `POST /api/assistant/feedback/:id/propose` | Requires knowledge proposal permission and ownership of the source feedback. Explicit confirmation shares a newly written title, guidance and optional evidence. A retry of the same source returns the original proposal. The conversation and private feedback text stay private. The resulting brand rule is subject to existing knowledge version review. |
+| `GET /api/assistant/learnings` | Management only. Supplies the most recent 100 learning proposal item IDs for the Brand Studio management filter. Content and version decisions use the existing knowledge API. |
+
+Collection responses include `restaurantDefault`. Default albums are restaurant-owned and editable by management. They can include photos independently shared to their audience, and do not grant additional image access. Team access is checked again for approved reference images.
+
+Edit advice accepts up to three optional prior editing instructions, each at most 600 characters. It sends the subject image, current recipe, current and prior instructions, bounded approved knowledge and visual preset metadata to the configured provider. The mock path can also receive up to two eligible on-brand reference images. A separate live subject-photo API setting, `AI_LIVE_PHOTO_ADVICE`, defaults to false and requires real auth and a configured Claude provider. Live reference image transmission requires a separate authorization mechanism and is disabled. Practice auth always selects mock AI.
+
+## Phase 3.5 practice integration
+
+| Route | Behavior |
+| --- | --- |
+| `POST /api/assistant/ask` | Optionally accepts up to three small UTF-8 TXT/CSV extracts and a privacy confirmation. Files are scoped to the owned conversation. Optional brand-review and strategy modes use the same provider and approved context. Strategy may use recent posted and upcoming approved activity. An owned and currently accessible `feedEvaluationId` can be associated durably with the conversation. |
+| `POST /api/visual/edit-advice` | Optionally accepts an owned conversation ID and uses up to four short recent messages. Requests still require subject access and photo privacy confirmation. |
+| `POST /api/visual/standards/:id/image-permission` | Allows the image owner to record or revoke permission for an exact reference version. Live inclusion also requires an active approved on-brand version, team sharing and enabled subject and reference settings. |
+| `GET /api/visual/feed-reviews` | Lists the caller's recent evaluations, restricted to snapshots whose photos the caller can still access. |
+| `POST /api/visual/feed-review` | Persists exact ordered library asset IDs, optional saved layout revision, approved visual versions, provider and validated output. The server verifies the claimed layout revision and order. Simulated only. |
+| `GET /api/assistant/learning-patterns` | Management only. Returns repeated normalized titles among explicitly shared proposals in the last 90 days. |
+| `GET /api/instagram/practice` | Reads the tenant's fictional account status and latest successful published-media metadata. Available with practice auth. |
+| `POST /api/instagram/practice` | Requires connection management permission. Connects, refreshes, simulates errors or disconnects the fictional account. Failed syncs preserve the last successful batch. |
+
+Migrations 016–018 add private document and evaluation storage, reference transmission authorization and evaluation request reservations, and the fictional account snapshot. Advisor uses selected excerpts as unverified data. At most 12 documents are retained on a conversation after a subsequent attachment write. Excerpts older than 30 days are excluded from retrieval. Expired rows in inactive threads still require a retention job.

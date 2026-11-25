@@ -28,6 +28,28 @@ describe('configuration safety', () => {
     expect(loadConfig({ NODE_ENV: 'test', AUTH_MODE: 'mock' }).authMode).toBe('mock');
   });
 
+  it('keeps live photo advice opt-in and ignores live AI configuration in practice auth', () => {
+    const paid = { ANTHROPIC_API_KEY: 'fictional-test-key' };
+    expect(loadConfig({ ...real, ...paid }).livePhotoAdvice).toBe(false);
+    expect(loadConfig({ ...real, ...paid, AI_LIVE_PHOTO_ADVICE: 'true' }).livePhotoAdvice).toBe(true);
+    expect(loadConfig({ NODE_ENV: 'test', AUTH_MODE: 'mock', ...paid, AI_LIVE_PHOTO_ADVICE: 'true' })).toMatchObject({
+      aiMode: 'mock', livePhotoAdvice: false,
+    });
+  });
+
+  it('enables isolated evaluation only for the explicit loopback preview configuration', () => {
+    const evaluation = {
+      NODE_ENV: 'development', AUTH_MODE: 'mock', AI_ISOLATED_EVALUATION: 'true',
+      ANTHROPIC_API_KEY: 'fictional-only', AI_MONTHLY_BUDGET_USD: '1', AI_EVALUATION_MAX_CALLS: '3',
+      WEB_ORIGIN: 'http://127.0.0.1:5173', DATABASE_URL: 'postgresql://pocket_preview@127.0.0.1:55437/postgres',
+    };
+    expect(loadConfig(evaluation)).toMatchObject({ aiMode: 'claude', evaluationMaxCalls: 3, livePhotoAdvice: false });
+    expect(loadConfig({ ...evaluation, AI_LIVE_PHOTO_ADVICE: 'true', AI_LIVE_REFERENCE_IMAGES: 'true' }))
+      .toMatchObject({ livePhotoAdvice: true, liveReferenceImages: true });
+    expect(() => loadConfig({ ...evaluation, ...real })).toThrow(/isolated/);
+    expect(() => loadConfig({ ...evaluation, AI_MONTHLY_BUDGET_USD: '20' })).toThrow(/isolated/);
+  });
+
   it('defaults to real Supabase authentication, never mock', () => {
     expect(loadConfig({ NODE_ENV: 'development', ...real }).authMode).toBe('supabase');
   });

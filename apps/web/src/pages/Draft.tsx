@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { AUDIENCES, AUDIENCE_LABELS, CHANNELS, CHANNEL_LABELS, type DraftRequest, type DraftResponse } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, Card, buttonClass, inputClass, secondaryButtonClass } from '../ui';
@@ -20,7 +20,11 @@ function List({ title, items }: { title: string; items: string[] }) {
 
 export function Draft() {
   const { apiFetch } = useAuth();
-  const [form, setForm] = useState<DraftRequest>({ audience: 'locals', channel: 'instagram', goal: '', topic: '' });
+  const location = useLocation();
+  const topic: unknown = location.state?.topic;
+  const [form, setForm] = useState<DraftRequest>({
+    audience: 'locals', channel: 'instagram', goal: '', topic: typeof topic === 'string' ? topic.slice(0, 1000) : '',
+  });
   const [result, setResult] = useState<DraftResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

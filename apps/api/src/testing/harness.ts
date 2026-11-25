@@ -39,7 +39,7 @@ export interface SignOverrides {
 }
 
 export async function createHarness(
-  opts: { withAuthAdmin?: boolean; ai?: AiProvider | null; aiBudgetUsd?: number; rateLimits?: AppDeps['rateLimits']; media?: MediaStore } = {},
+  opts: { practiceInstagram?: boolean; livePhotoAdvice?: boolean; liveReferenceImages?: boolean; evaluationMaxCalls?: number; withAuthAdmin?: boolean; ai?: AiProvider | null; aiBudgetUsd?: number; rateLimits?: AppDeps['rateLimits']; media?: MediaStore } = {},
 ): Promise<Harness> {
   const withAuthAdmin = opts.withAuthAdmin ?? true;
   const db = await createTestDb();
@@ -65,6 +65,10 @@ export async function createHarness(
     webOrigin: WEB_ORIGIN,
     ai: opts.ai ?? null,
     aiBudgetUsd: opts.aiBudgetUsd,
+    practiceInstagram: opts.practiceInstagram,
+    livePhotoAdvice: opts.livePhotoAdvice,
+    liveReferenceImages: opts.liveReferenceImages,
+    evaluationMaxCalls: opts.evaluationMaxCalls,
     rateLimits: opts.rateLimits,
     media: opts.media,
   });

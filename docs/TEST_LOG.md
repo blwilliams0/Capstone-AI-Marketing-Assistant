@@ -420,3 +420,65 @@ Two Fable-model reviews (photo upload security; whole-project bug hunt plus plan
 **Live:** migration 010 applied; 26 tables with RLS; 0 public access. `npm audit --omit=dev`: 0 vulnerabilities.
 
 **Not yet measured live:** cost of filling from a transcript. Estimate about 30–60 cents for a one-hour interview (about 25,000 input tokens plus the excerpts).
+
+## 15. Marketing Studio practice preview (2026-11-24)
+
+On `feat/marketing-studio` at `053e05b`, Node 24.22.3 passed `npm run build`, `npm run typecheck`, `npm run lint`, `npm test`, and `npm run check:bundle`. The full suite reported 222 passes (shared 7, DB 63, API 143, worker 9). The bundle scan checked three files and found no server secrets or mock sign-in.
+
+The two new tests cover actual decode, malformed and oversized images, orientation and metadata stripping, cross-restaurant denial, private retrieval of previous versions, approval invalidation and stale fact references after photo replacement.
+
+On the local PostgreSQL preview, an HTTP smoke test exercised the mock Advisor, private conversation history, role-based upload denial, photo upload and retrieval, approval, Ready to Post, and invalidation after photo replacement. In shared Chrome, the admin Overview, mock Advisor reply, prefilled draft handoff, and approval filter were exercised. Tablet and phone layouts, a browser file-picker flow, a Mac run, shared Supabase and live Claude were outside this verification pass.
+
+## 16. Editorial design and Visual Studio (2026-11-24)
+
+The isolated feature-branch run passed build, typecheck, lint, tests and the bundle check. Tests reported 223 passes (shared 7, database 63, API 144, worker 9). The added test verifies duplicate finalization, user and restaurant isolation, normalized image bytes reaching a mock provider, derivative lineage and usage recording.
+
+Cloud Chrome showed explicit dark foreground and pearl background on the Overview action. A contributor uploaded a fictional photo through the file picker, saw the simulated review, saved a square crop, downloaded a decoded 250×250 PNG from the 400×250 source, and added the edit to Feed Planner. A local PostgreSQL/API smoke test attached the edited image to an approved draft and verified the previous approval was superseded. Browser checks covered desktop contributor mode. Dedicated mobile, macOS, live Supabase and live Claude runs were outside this verification pass.
+
+## Marketing Studio Phase 2
+
+Starting checkpoint: `97b5b82`. Verification used isolated practice configuration and fictional data.
+
+| Command | Result |
+| --- | --- |
+| `npm run build` | Passed |
+| `npm run typecheck` | Passed |
+| `npm run lint` | Passed |
+| `npm test` | 226 passed across shared (7), database (63), worker (9), and API (147) |
+| `npm run check:bundle` | Passed, 8 files checked |
+
+New integration coverage exercises collection visibility, per-photo access, revocation, feed ordering and stale revisions, exact visual standard eligibility, mock image inputs, relative recipe recommendations, preference and feedback isolation, and stored review retrieval. Existing content and exact-version approval suites passed.
+
+Cloud Chromium verification covered the practice role chooser, administrator sign-in, name and operational data on Overview, photo and prompt transfer into Advisor, rendering a warmth increase, requesting a relative reduction, saving and reopening a derivative with its source link, and reordering and reopening a named private feed layout after reload. A separate browser file download and pixel-level comparison of exported files were outside this run. Other roles, macOS, mobile, Safari, live Claude, and shared Supabase were outside this run.
+
+## Marketing Studio Phase 3
+
+Baseline `3ecfafc` on `feat/marketing-studio`. Used isolated PostgreSQL, mock authentication, fictional photos and mock or spy AI.
+
+Desktop Chromium opened the administrator practice session. The personalized greeting had computed Cormorant Garamond, the composer used Raleway, and the workspace had no horizontal overflow at 1180 px. The browser verified rail persistence after reload, focus mode and restore, identity navigation, a greeting sent from At a Glance using Enter, the plus and photo menus, default albums in the photo picker, photo removal, keyboard privacy confirmation, and automatic practice edit advice after handoff. It rendered warmth at 0.12 and restored that recipe on the newly saved derivative. A named private feed layout reopened with the same photos. Its larger image dialog closed with Escape, and a three-photo practice grid review remained separate from the manually recorded publication.
+
+Chromium exported the edited JPEG and PNG and an unedited source PNG. Sharp decoded all three at 1120 × 760. Relative to the unedited source, the edited PNG's mean red and blue changes were +3.00 and −3.00. The JPEG changes were +3.28 and −2.86. This verifies output bytes, pixel adjustments, matching dimensions and the source link for the tested photo.
+
+The browser pass did not capture a pending response long enough to verify the animation lifecycle, cancellation or reduced motion. Mobile, Safari, macOS, the final learning proposal interface, drag-and-drop regression, and production integrations were outside the browser pass. Automated tests cover safe proposal approval and retrieval, authorization, and provider input ordering. The build retains Vite's large-chunk warning.
+
+| Repository check | Result |
+| --- | --- |
+| `npm run build` | Passed |
+| `npm run typecheck` | Passed |
+| `npm run lint` | Passed |
+| `npm test` | 230 passed across shared (7), database (63), worker (9), and API (151) |
+| `npm run check:bundle` | Passed, 8 files checked |
+
+## Marketing Studio Phase 3.5
+
+Started from `2fe25ac`. Used isolated local PostgreSQL, fictional data, mock authentication and mock or spy providers. No paid requests or real Instagram sync were performed.
+
+Chromium verified keyboard-triggered navigation collapse and restoration after reload, selection of a CSV and TXT fixture, removing one attachment, confirming privacy and sending the CSV from At a Glance to Advisor. It also verified connecting and refreshing the fictional Instagram account, retaining media and the prior success timestamp through a simulated rate limit, and reopening a private feed evaluation after reload and using it to start an Advisor discussion.
+
+A loopback-only test proxy delayed Advisor responses independently of the application. Chromium observed that typing did not show the bowl, and that a submitted request rendered the spoon with the `studio-stir` animation. Success, a controlled 502, and cancel restored the send action. The reduced-motion CSS exists. That browser preference and mobile, Safari, macOS and live-provider quality were not exercised. The final in-memory handoff hardening was typechecked as part of the release checks.
+
+The full route matrix outgrew the default per-IP quota in its single test client. The matrix now uses a larger test-only quota. Separate rate-limit tests and production defaults are unchanged.
+
+The Meta metadata reader was tested with an injected fetcher that verified the exact pinned host and endpoint, the authorization header, cursor pagination, refusal to follow provider pagination URLs, and token-expiry mapping. The reader was never pointed at a real account.
+
+The release run passed `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` and `npm run check:bundle`. The full suite reports 235 passing tests (156 API, 63 database, 9 worker, 7 shared). A fresh run of the 14 migration tests separately confirmed RLS, revoked public privileges and migration idempotence. Bundle inspection passed for all eight files. The existing Vite large-chunk warning persists.

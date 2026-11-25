@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   AUDIENCES,
   AUDIENCE_LABELS,
@@ -104,7 +104,9 @@ export function Posts() {
   const { me, apiFetch } = useAuth();
   const [posts, setPosts] = useState<PostSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState('all');
+  const [params, setParams] = useSearchParams();
+  const requestedFilter = params.get('filter');
+  const filter = FILTERS.find((item) => item.key === requestedFilter)?.key ?? 'all';
   const [writing, setWriting] = useState(false);
 
   const load = useCallback(async () => {
@@ -155,7 +157,7 @@ export function Posts() {
               key={f.key}
               role="tab"
               aria-selected={filter === f.key}
-              onClick={() => setFilter(f.key)}
+              onClick={() => setParams(f.key === 'all' ? {} : { filter: f.key })}
               className={`rounded-md border px-3 py-1 text-sm ${filter === f.key ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-300 bg-white hover:bg-stone-100'}`}
             >
               {f.label} ({n})

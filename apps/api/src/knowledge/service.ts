@@ -194,41 +194,52 @@ export async function proposeVersion(
   itemId: string,
   input: { body: string; sourceNote?: string; expiresAt?: string; origin?: Origin },
   requestId?: string,
-): Promise<{ versionId: string; version: number } | 'not_found' | 'retired'> {
-  return db.transaction(async (tx) => {
-    const [item] = await tx.query<{ id: string; title: string; kind: string; retired_at: unknown }>(
-      `SELECT id, title, kind, retired_at FROM knowledge_items WHERE id = $1 AND restaurant_id = $2 FOR UPDATE`,
-      [itemId, actor.restaurantId],
-    );
-    if (!item) return 'not_found' as const;
-    if (item.retired_at) return 'retired' as const;
-    const [{ next }] = (await tx.query<{ next: number }>(
-      `SELECT COALESCE(MAX(version), 0) + 1 AS next FROM knowledge_versions WHERE item_id = $1`,
-      [itemId],
-    )) as [{ next: number }];
-    const origin = input.origin ?? 'human';
-    const v = await insertVersion(tx, {
-      itemId,
-      restaurantId: actor.restaurantId,
-      version: next,
-      body: input.body,
-      origin,
-      sourceNote: input.sourceNote,
-      expiresAt: input.expiresAt,
-      proposedBy: actor.userId,
-      title: item.title,
-    });
-    await recordAudit(tx, {
-      restaurantId: actor.restaurantId,
-      actorUserId: actor.userId,
-      action: 'knowledge.proposed',
-      targetType: 'knowledge_version',
-      targetId: v.id,
-      details: { itemId, kind: item.kind, version: next, origin, digest: v.digest },
-      requestId,
-    });
-    return { versionId: v.id, version: next };
+): Promise<{ versionId: string; version: number } | 'not_found' | 'retired' | 'visual_required'> {
+  return db.transaction((tx) => proposeVersionTx(tx, actor, itemId, input, requestId));
+}
+
+export async function proposeVersionTx(
+  tx: Db,
+  actor: AuthContext,
+  itemId: string,
+  input: { body: string; sourceNote?: string; expiresAt?: string; origin?: Origin },
+  requestId?: string,
+  visual = false,
+): Promise<{ versionId: string; version: number } | 'not_found' | 'retired' | 'visual_required'> {
+  const [item] = await tx.query<{ id: string; title: string; kind: string; retired_at: unknown }>(
+    `SELECT id, title, kind, retired_at FROM knowledge_items WHERE id = $1 AND restaurant_id = $2 FOR UPDATE`,
+    [itemId, actor.restaurantId],
+  );
+  if (!item) return 'not_found' as const;
+  if (item.retired_at) return 'retired' as const;
+  if (!visual && (await tx.query(`SELECT 1 FROM visual_standards s JOIN knowledge_versions v
+    ON v.id = s.version_id WHERE v.item_id = $1 LIMIT 1`, [itemId])).length) return 'visual_required';
+  const [{ next }] = (await tx.query<{ next: number }>(
+    `SELECT COALESCE(MAX(version), 0) + 1 AS next FROM knowledge_versions WHERE item_id = $1`,
+    [itemId],
+  )) as [{ next: number }];
+  const origin = input.origin ?? 'human';
+  const v = await insertVersion(tx, {
+    itemId,
+    restaurantId: actor.restaurantId,
+    version: next,
+    body: input.body,
+    origin,
+    sourceNote: input.sourceNote,
+    expiresAt: input.expiresAt,
+    proposedBy: actor.userId,
+    title: item.title,
   });
+  await recordAudit(tx, {
+    restaurantId: actor.restaurantId,
+    actorUserId: actor.userId,
+    action: 'knowledge.proposed',
+    targetType: 'knowledge_version',
+    targetId: v.id,
+    details: { itemId, kind: item.kind, version: next, origin, digest: v.digest },
+    requestId,
+  });
+  return { versionId: v.id, version: next };
 }
 
 /** Words currently in the brand core, optionally ignoring one item (the one about to change). */
@@ -498,6 +509,7 @@ export async function searchSections(
        CROSS JOIN (SELECT to_tsquery('english', $2) AS query) q
       WHERE s.restaurant_id = $1 AND i.retired_at IS NULL AND i.kind = ANY($4::text[])
         AND (v.expires_at IS NULL OR v.expires_at > now())
+        AND NOT EXISTS (SELECT 1 FROM visual_standards vs WHERE vs.version_id = v.id)
         AND s.search @@ q.query
       ORDER BY rank DESC, s.id
       LIMIT $3`,

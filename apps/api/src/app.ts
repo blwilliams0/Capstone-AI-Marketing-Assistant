@@ -31,6 +31,10 @@ export interface AppDeps {
   media?: MediaStore;
   /** Monthly AI budget in US dollars (estimated cost). Defaults to 25. */
   aiBudgetUsd?: number;
+  practiceInstagram?: boolean;
+  livePhotoAdvice?: boolean;
+  liveReferenceImages?: boolean;
+  evaluationMaxCalls?: number;
 }
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -58,6 +62,10 @@ export function createApp(deps: AppDeps): { app: express.Express; policies: Poli
     authAdmin: deps.authAdmin,
     ai: deps.ai ?? null,
     aiBudgetUsd: deps.aiBudgetUsd ?? 25,
+    practiceInstagram: deps.practiceInstagram,
+    livePhotoAdvice: deps.livePhotoAdvice,
+    liveReferenceImages: deps.liveReferenceImages,
+    evaluationMaxCalls: deps.evaluationMaxCalls,
     aiLimit,
     media: deps.media,
   });

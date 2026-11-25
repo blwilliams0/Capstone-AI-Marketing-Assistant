@@ -8,13 +8,17 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, path.resolve(__dirname, '../..'), '');
   const mockAuth = mode === 'development' && env.AUTH_MODE === 'mock';
+  const previewProxy = mode === 'development' ? process.env.POCKET_PREVIEW_PROXY : undefined;
   return {
     plugins: [react(), tailwindcss()],
-    server: { port: 5173 },
+    server: {
+      port: 5173,
+      proxy: previewProxy ? { '/api': previewProxy, '/health': previewProxy } : undefined,
+    },
     define: {
-      __SUPABASE_URL__: JSON.stringify(env.SUPABASE_URL ?? ''),
-      __SUPABASE_PUBLISHABLE_KEY__: JSON.stringify(env.SUPABASE_PUBLISHABLE_KEY ?? ''),
-      __API_URL__: JSON.stringify(env.VITE_API_URL ?? 'http://localhost:3000'),
+      __SUPABASE_URL__: JSON.stringify(previewProxy ? '' : (env.SUPABASE_URL ?? '')),
+      __SUPABASE_PUBLISHABLE_KEY__: JSON.stringify(previewProxy ? '' : (env.SUPABASE_PUBLISHABLE_KEY ?? '')),
+      __API_URL__: JSON.stringify(previewProxy ? '' : (env.VITE_API_URL ?? 'http://localhost:3000')),
       __MOCK_AUTH__: JSON.stringify(mockAuth),
     },
   };

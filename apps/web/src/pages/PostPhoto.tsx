@@ -36,20 +36,42 @@ export function PostPhoto({
     setUrl(null);
     if (!sha256) return;
     let alive = true;
+    let localUrl: string | undefined;
     void apiFetch(`/api/posts/${itemId}/media?versionId=${versionId}`).then(async (res) => {
-      if (!alive) return;
-      if (res.ok) setUrl(((await res.json()) as { url: string }).url);
-      else setError(await readError(res));
+      if (!res.ok) {
+        const message = await readError(res);
+        if (alive) setError(message);
+        return;
+      }
+      if (res.headers.get('content-type')?.startsWith('image/')) {
+        const blob = await res.blob();
+        if (alive) {
+          localUrl = URL.createObjectURL(blob);
+          setUrl(localUrl);
+        }
+      } else {
+        const data = (await res.json()) as { url: string };
+        if (alive) setUrl(data.url);
+      }
     });
     return () => {
       alive = false;
+      if (localUrl) URL.revokeObjectURL(localUrl);
     };
   }, [apiFetch, itemId, versionId, sha256, refresh]);
 
   async function downloadPhoto() {
     const res = await apiFetch(`/api/posts/${itemId}/media?versionId=${versionId}&download=1`);
-    if (res.ok) window.location.assign(((await res.json()) as { url: string }).url);
-    else setError(await readError(res));
+    if (!res.ok) return setError(await readError(res));
+    if (res.headers.get('content-type')?.startsWith('image/')) {
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `pocket-photo.${blob.type.split('/')[1] ?? 'jpg'}`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    } else window.location.assign(((await res.json()) as { url: string }).url);
   }
 
   async function upload(file: File) {
@@ -57,9 +79,15 @@ export function PostPhoto({
     if (!ACCEPT.split(',').includes(file.type)) return setError('Choose a JPEG, PNG or WebP photo.');
     if (file.size > MAX_BYTES) return setError('Photos must be 10 MB or smaller.');
     if (approved && !window.confirm('This post is approved. Adding a photo creates a new version that needs approving again. Continue?')) return;
-    if (!supabase) return setError('Photo upload is not available in this setup.');
+    if (!supabase && !__MOCK_AUTH__) return setError('Photo upload is not available in this setup.');
     setBusy(true);
     try {
+      if (!supabase) {
+        const response = await apiFetch(`/api/posts/${itemId}/media/practice`, { method: 'POST', body: file });
+        if (!response.ok) return setError(await readError(response));
+        await onChanged?.();
+        return;
+      }
       const link = await apiFetch(`/api/posts/${itemId}/media/upload-link`, { method: 'POST', body: { contentType: file.type } });
       if (!link.ok) return setError(await readError(link));
       const { bucket, path, token } = (await link.json()) as { bucket: string; path: string; token: string };

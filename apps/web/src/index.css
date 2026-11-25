@@ -1,1 +1,60 @@
 @import 'tailwindcss';
+
+@theme {
+  --color-studio-slate: #4e5156;
+  --color-studio-taupe: #826e55;
+  --color-studio-ivory: #d6c7aa;
+  --color-studio-cream: #f7f1e1;
+  --color-studio-pearl: #fcf8ef;
+  --color-studio-linen: #e3dac8;
+  --color-studio-ink: #150c0c;
+  --color-studio-muted: #655644;
+  --color-white: var(--color-studio-pearl);
+  --color-stone-50: var(--color-studio-cream);
+  --color-stone-100: #eee5d4;
+  --color-stone-200: var(--color-studio-linen);
+  --color-stone-300: var(--color-studio-ivory);
+  --color-stone-400: var(--color-studio-taupe);
+  --color-stone-500: var(--color-studio-muted);
+  --color-stone-600: var(--color-studio-muted);
+  --color-stone-700: #3e4146;
+  --color-stone-800: var(--color-studio-ink);
+  --color-stone-900: var(--color-studio-slate);
+  --font-sans: Raleway, system-ui, sans-serif;
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+}
+
+@font-face {
+  font-family: Raleway;
+  src: url('/fonts/Raleway.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  src: url('/fonts/CormorantGaramond.ttf') format('truetype');
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+@layer base {
+  body { @apply bg-studio-cream text-studio-ink antialiased; }
+  h1 { @apply font-serif tracking-tight; }
+  input, textarea, select { @apply text-studio-ink; }
+  ::placeholder { opacity: 1; color: var(--color-studio-muted); }
+  :focus-visible {
+    outline: 2px solid var(--color-studio-ink);
+    outline-offset: 3px;
+    box-shadow: 0 0 0 3px var(--color-studio-pearl);
+  }
+}
+
+@keyframes studio-stir {
+  0%, 100% { transform: rotate(-17deg) translateX(-2px); }
+  50% { transform: rotate(17deg) translateX(2px); }
+}
+.studio-spoon { transform-origin: 20px 23px; animation: studio-stir 1.25s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .studio-spoon { animation: none; }
+}

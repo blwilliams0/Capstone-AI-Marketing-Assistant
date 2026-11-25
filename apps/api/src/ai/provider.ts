@@ -43,6 +43,7 @@ export interface StructuredRequest<T> {
   system: string;
   documents: AiDocument[];
   prompt: string;
+  images?: { mediaType: 'image/jpeg' | 'image/png' | 'image/webp'; bytes: Uint8Array }[];
   schema: z.ZodType<T>;
   effort: Effort;
   /** Output limit including thinking. Default 8000; long jobs ask for more. */

@@ -6,6 +6,7 @@ import { createSupabaseVerifier } from './auth/tokens.js';
 import { loadConfig } from './config.js';
 import { createClaudeAiProvider, createClaudeClient } from './ai/claude.js';
 import { createMockAiProvider } from './ai/provider.js';
+import { createLocalMediaStore } from './media/local.js';
 import { createSupabaseMediaStore, ensureMediaBucket } from './media/store.js';
 
 const config = loadConfig(); // throws (and the process exits) on unsafe or incomplete configuration
@@ -40,13 +41,14 @@ const authAdmin =
 
 const ai =
   config.aiMode === 'claude'
-    ? createClaudeAiProvider(createClaudeClient(config.anthropicApiKey!))
+    ? createClaudeAiProvider(createClaudeClient(config.anthropicApiKey!, config.evaluationMaxCalls !== undefined), config.evaluationMaxCalls !== undefined)
     : config.aiMode === 'mock'
       ? createMockAiProvider()
       : null;
 
+const practiceMediaDirectory = config.authMode === 'mock' ? process.env.POCKET_PREVIEW_MEDIA_DIR : undefined;
 const media =
-  config.supabaseUrl && config.supabaseSecretKey
+  practiceMediaDirectory ? createLocalMediaStore(practiceMediaDirectory) : config.supabaseUrl && config.supabaseSecretKey
     ? createSupabaseMediaStore({ supabaseUrl: config.supabaseUrl, secretKey: config.supabaseSecretKey })
     : undefined;
 
@@ -57,9 +59,10 @@ if (config.supabaseUrl && config.supabaseSecretKey) {
     .catch((err: unknown) => console.error(JSON.stringify({ level: 'error', msg: 'photo storage check failed', error: err instanceof Error ? err.message : String(err) })));
 }
 
-const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd, media });
+const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd, practiceInstagram: config.authMode === 'mock', livePhotoAdvice: config.livePhotoAdvice, liveReferenceImages: config.liveReferenceImages, evaluationMaxCalls: config.evaluationMaxCalls, media });
 
-const server = app.listen(config.port, () => {
+const hostname = config.authMode === 'mock' ? '127.0.0.1' : '0.0.0.0';
+const server = app.listen(config.port, hostname, () => {
   console.log(
     JSON.stringify({ level: 'info', msg: 'api started', port: config.port, authMode: config.authMode, aiMode: config.aiMode }),
   );

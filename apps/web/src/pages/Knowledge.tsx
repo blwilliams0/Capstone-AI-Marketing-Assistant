@@ -1,3 +1,5 @@
+import { VisualStandards } from '../visual/VisualStandards';
+import { useSearchParams } from 'react-router';
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   KNOWLEDGE_KIND_LABELS,
@@ -26,12 +28,18 @@ const fmt = (iso: string) => new Date(iso).toLocaleString();
 
 export function Knowledge() {
   const { me, apiFetch } = useAuth();
-  const [kind, setKind] = useState<KnowledgeKind>('brand_rule');
+  const [params, setParams] = useSearchParams();
+  const selectedKind = params.get('kind');
+  const kind = KNOWLEDGE_KINDS.find((value) => value === selectedKind) ?? 'brand_rule';
   const [items, setItems] = useState<KnowledgeItemView[] | null>(null);
   const [core, setCore] = useState<BrandCore | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [learningIds, setLearningIds] = useState<string[]>([]);
+  const [learningPatterns, setLearningPatterns] = useState<{ topic: string; submissions: number }[]>([]);
+  const [onlyLearnings, setOnlyLearnings] = useState(false);
+  const [search, setSearch] = useState('');
 
   const canPropose = me?.capabilities.includes('knowledge.propose') ?? false;
   const canApprove = me?.capabilities.includes('brand.approve') ?? false;
@@ -41,7 +49,13 @@ export function Knowledge() {
     if (a.ok) setItems(((await a.json()) as { items: KnowledgeItemView[] }).items);
     else setError(await readError(a));
     if (b.ok) setCore((await b.json()) as BrandCore);
-  }, [apiFetch]);
+    if (canApprove) {
+      const [learning, patterns] = await Promise.all([apiFetch('/api/assistant/learnings'), apiFetch('/api/assistant/learning-patterns')]);
+      if (patterns.ok) setLearningPatterns((await patterns.json()).patterns);
+      if (learning.ok) setLearningIds(((await learning.json()) as { itemIds: string[] }).itemIds);
+      else setError(await readError(learning));
+    }
+  }, [apiFetch, canApprove]);
 
   useEffect(() => {
     void load();
@@ -60,21 +74,24 @@ export function Knowledge() {
     return false;
   };
 
-  const shown = (items ?? []).filter((i) => i.kind === kind);
+  const query = search.trim().toLowerCase();
+  const shown = (items ?? []).filter((item) =>
+    item.kind === kind && (!onlyLearnings || learningIds.includes(item.id)) && (!query || item.title.toLowerCase().includes(query) || item.current?.body.toLowerCase().includes(query)),
+  );
   const pendingCount = (k: KnowledgeKind) => (items ?? []).filter((i) => i.kind === k && i.pending.length > 0).length;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">The Pocket's knowledge</h1>
+          <h1 className="text-2xl font-semibold">Brand Studio</h1>
           <p className="text-sm text-stone-600">
             Only approved, current items are used by the assistant. Proposals wait here until an administrator approves the exact wording.
           </p>
         </div>
         {canPropose && (
           <button className={buttonClass} onClick={() => setAdding(!adding)}>
-            {adding ? 'Close' : 'Add something'}
+            {adding ? 'Close' : 'New proposal'}
           </button>
         )}
       </div>
@@ -87,7 +104,17 @@ export function Knowledge() {
       )}
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
+      <VisualStandards propose />
+      {canApprove && <button type="button" className={secondaryButtonClass} aria-pressed={onlyLearnings}
+        onClick={() => { setOnlyLearnings(!onlyLearnings); setParams({ kind: 'brand_rule' }); }}>
+        {onlyLearnings ? 'Show all brand rules' : 'Review staff learning proposals'}
+      </button>}
 
+      {onlyLearnings && <Card title="Repeated staff proposals">
+        <p className="text-sm text-studio-muted">Counts explicitly shared proposals with the same title in the last 90 days.</p>
+        {learningPatterns.length ? <ul className="mt-2 list-disc pl-5 text-sm">{learningPatterns.map((entry) =>
+          <li key={entry.topic}>{entry.topic} · {entry.submissions} submissions</li>)}</ul> : <p className="mt-2 text-sm">No repeated titles yet.</p>}
+      </Card>}
       {adding && (
         <AddForm
           initialKind={kind}
@@ -100,8 +127,9 @@ export function Knowledge() {
       <div className="flex flex-wrap gap-2 border-b border-stone-200">
         {KNOWLEDGE_KINDS.map((k) => (
           <button
+            aria-pressed={k === kind}
             key={k}
-            onClick={() => setKind(k)}
+            onClick={() => { setOnlyLearnings(false); setParams({ kind: k }); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${k === kind ? 'border-stone-900 font-medium' : 'border-transparent text-stone-600'}`}
           >
             {KNOWLEDGE_KIND_LABELS[k].name}
@@ -109,10 +137,14 @@ export function Knowledge() {
           </button>
         ))}
       </div>
-      <p className="text-sm text-stone-600">{KNOWLEDGE_KIND_LABELS[kind].description}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-stone-600">{KNOWLEDGE_KIND_LABELS[kind].description}</p>
+        <input aria-label="Filter knowledge in this category" value={search} onChange={(event) => setSearch(event.target.value)}
+          placeholder="Filter this category" type="search" className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm" />
+      </div>
 
       {!items && !error && <p className="text-sm text-stone-500">Loading…</p>}
-      {items && shown.length === 0 && <p className="text-sm text-stone-500">Nothing here yet.</p>}
+      {items && shown.length === 0 && <p className="text-sm text-stone-500">{query ? 'No items match this filter.' : 'Nothing here yet.'}</p>}
       <div className="space-y-4">
         {shown.map((item) => (
           <ItemCard key={item.id} item={item} canPropose={canPropose} canApprove={canApprove} myId={me?.userId ?? ''} act={act} />
