@@ -48,6 +48,11 @@ it('finalizes private photos idempotently, preserves edits and supplies actual n
       .send({ ids: [id, copy.body.id], privacyConfirmed: true });
     expect(review.status).toBe(200);
     expect(review.body.simulated).toBe(true);
+    const reviewPath = '/api/visual/reviews?assetId=' + id;
+    const history = await request(h.app).get(reviewPath).auth(member.token, { type: 'bearer' });
+    expect(history.body.reviews).toMatchObject([{ id: review.body.reviewId, assetCount: 2, simulated: true }]);
+    const denied = await request(h.app).get(reviewPath).auth(colleague.token, { type: 'bearer' });
+    expect(denied.body.reviews).toEqual([]);
     expect(reviewed).toHaveLength(2);
     expect(await sharp(reviewed[0]!).metadata()).toMatchObject({ width: 10, height: 20, format: 'jpeg' });
     const [usage] = await h.db.query<{ task: string; provider: string; outcome: string }>(

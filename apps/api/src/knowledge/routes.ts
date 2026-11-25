@@ -100,6 +100,7 @@ export function addKnowledgeRoutes(r: PolicyRouter, db: Db) {
     const out = await proposeVersion(db, req.auth!, p.data.itemId, b.data, req.requestId);
     if (out === 'not_found') res.status(404).json({ error: 'Not found.' });
     else if (out === 'retired') res.status(409).json({ error: 'That item has been retired.' });
+    else if (out === 'visual_required') res.status(409).json({ error: 'Revise the reference or preset through Visual Standards.' });
     else res.status(201).json({ ...out, status: 'proposed' });
   });
 

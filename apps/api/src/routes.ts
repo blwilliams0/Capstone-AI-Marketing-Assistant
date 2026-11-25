@@ -13,7 +13,11 @@ import { addCalendarRoutes } from './calendar/routes.js';
 import type { AiProvider } from './ai/provider.js';
 import type { MediaStore } from './media/store.js';
 import { addMediaRoutes } from './media/routes.js';
+import { addCollectionRoutes } from './media/collections.js';
 import { addVisualRoutes } from './media/visual.js';
+import { addEditAdviceRoute } from './media/edit-advice.js';
+import { addVisualStandardRoutes } from './media/standards.js';
+import { addMemoryRoutes } from './ai/memory.js';
 
 export interface RouteDeps {
   db: Db;
@@ -200,7 +204,11 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
   addContentRoutes(r, db, deps.media);
   addCalendarRoutes(r, db);
   addMediaRoutes(r, db, deps.media);
+  addCollectionRoutes(r, db);
+  addMemoryRoutes(r, db);
+  addVisualStandardRoutes(r, db);
   addVisualRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
+  addEditAdviceRoute(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
   addInterviewRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
   addAssistantRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
 

@@ -7,6 +7,7 @@ import { guard, callProvider, AiUnavailableError, type AiDeps } from '../ai/assi
 import { recordUsage } from '../ai/usage.js';
 import { brandCoreDocuments } from '../ai/context.js';
 import type { PolicyRouter } from '../policy.js';
+import { visibleAsset } from './collections.js';
 import { normalizePracticePhoto } from './local.js';
 import { MEDIA_MAX_BYTES, MEDIA_TYPES, sha256Hex } from './store.js';
 
@@ -20,7 +21,7 @@ export function addVisualRoutes(router: PolicyRouter, deps: AiDeps, aiLimit: Req
   const { db } = deps;
   router.get('/visual/assets', 'content.draft', async (req, res) => {
     const actor = req.auth!;
-    const assets = await db.query<VisualAsset>(`SELECT ${summary} FROM visual_assets WHERE ${owner} ORDER BY created_at DESC, id DESC`, [actor.restaurantId, actor.userId]);
+    const assets = await db.query<VisualAsset>(`SELECT ${summary}, a.owner_id = $2 AS "owned" FROM visual_assets a WHERE ${visibleAsset} ORDER BY created_at DESC, id DESC`, [actor.restaurantId, actor.userId, actor.role === 'admin']);
     res.json({ assets });
   });
 
@@ -68,6 +69,10 @@ export function addVisualRoutes(router: PolicyRouter, deps: AiDeps, aiLimit: Req
           && asset.parentId === (parentId ?? null) && sameRecipe ? { asset, inserted: false } : 'conflict';
       }
       if (parentId && !(await tx.query(`SELECT id FROM visual_assets WHERE ${owner} AND id = $3`, [...key, parentId])).length) return 'missing';
+      const presetVersionId = info.data.edits?.presetVersionId;
+      if (presetVersionId && !(await tx.query(`SELECT 1 FROM visual_standards s JOIN knowledge_versions v ON v.id = s.version_id
+        WHERE s.version_id = $1 AND s.restaurant_id = $2 AND s.kind = 'preset' AND v.status IN ('approved','superseded')`,
+      [presetVersionId, actor.restaurantId])).length) return 'preset';
       const [quota] = await tx.query<{ count: number; bytes: string }>(
         `SELECT count(*)::int AS count, coalesce(sum(octet_length(image_bytes)),0) AS bytes FROM visual_assets WHERE ${owner}`, key,
       );
@@ -84,6 +89,7 @@ export function addVisualRoutes(router: PolicyRouter, deps: AiDeps, aiLimit: Req
       return { asset, inserted: true };
     });
     if (result === 'missing') return res.status(404).json({ error: 'Source photo unavailable.' });
+    if (result === 'preset') return res.status(400).json({ error: 'Preset version is unavailable.' });
     if (result === 'quota') return res.status(409).json({ error: 'This practice library has reached its storage limit.' });
     if (result === 'conflict') return res.status(409).json({ error: 'This upload identifier is already in use.' });
     return res.status(result.inserted ? 201 : 200).json(result.asset);
@@ -95,8 +101,8 @@ export function addVisualRoutes(router: PolicyRouter, deps: AiDeps, aiLimit: Req
     if (!params.success || !query.success) return res.status(400).json({ error: 'Invalid image request.' });
     const actor = req.auth!;
     const [asset] = await db.query<{ bytes: string; media_type: string }>(
-      `SELECT encode(image_bytes, 'base64') AS bytes, media_type FROM visual_assets WHERE ${owner} AND id = $3`,
-      [actor.restaurantId, actor.userId, params.data.id],
+      `SELECT encode(image_bytes, 'base64') AS bytes, media_type FROM visual_assets a WHERE ${visibleAsset} AND a.id = $4`,
+      [actor.restaurantId, actor.userId, actor.role === 'admin', params.data.id],
     );
     if (!asset) return res.status(404).json({ error: 'Photo unavailable.' });
     const bytes = Buffer.from(asset.bytes, 'base64');
@@ -105,6 +111,17 @@ export function addVisualRoutes(router: PolicyRouter, deps: AiDeps, aiLimit: Req
       return res.type('image/webp').send(await sharp(bytes).resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp().toBuffer());
     }
     return res.type(asset.media_type).send(bytes);
+  });
+
+  router.get('/visual/reviews', 'assistant.use', async (req, res) => {
+    const actor = req.auth!;
+    const rawId = idParam.safeParse({ id: req.query.assetId });
+    if (!rawId.success) return res.status(400).json({ error: 'Choose an image.' });
+    const reviews = await db.query(`SELECT v.id, v.result, v.simulated, v.created_at AS "createdAt", (SELECT count(*)::int FROM visual_review_assets y WHERE y.review_id = v.id) AS "assetCount"
+      FROM visual_reviews v JOIN visual_review_assets x ON x.review_id = v.id
+      WHERE v.restaurant_id = $1 AND v.user_id = $2 AND x.asset_id = $3
+      ORDER BY v.created_at DESC LIMIT 10`, [actor.restaurantId, actor.userId, rawId.data.id]);
+    return res.json({ reviews });
   });
 
   router.post('/visual/review', 'assistant.use', aiLimit, async (req, res) => {
@@ -136,13 +153,23 @@ export function addVisualRoutes(router: PolicyRouter, deps: AiDeps, aiLimit: Req
           brandConsiderations: ['Compare the set with approved brand guidance before making a selection.'],
           recommendations: ['Compare exposure, texture and framing at the intended output size.'],
           verify: ['Check image rights, recognizable people and any factual claims before use.'],
+          ...(images.length === 1 ? { suggestedRecipe: { exposure: 0.08, warmth: 0.1, contrast: 0, saturation: -0.04,
+            highlights: 0, shadows: 0, sharpness: 0, crop: 'original' as const } } : {}),
         }),
       }));
       const validated = visualReviewResultSchema.safeParse(result.data);
       await recordUsage(db, { restaurantId: actor.restaurantId, userId: actor.userId, task: 'photo_review',
         provider: provider.name, model: result.model, usage: result.usage, outcome: result.refused ? 'refused' : validated.success ? 'ok' : 'error' });
       if (!validated.success || result.refused) return res.status(422).json({ error: 'The provider did not return a usable review.' });
-      return res.json({ review: validated.data, simulated: true });
+      const reviewId = await db.transaction(async (tx) => {
+        const [review] = await tx.query<{ id: string }>(`INSERT INTO visual_reviews (restaurant_id,user_id,result,simulated)
+          VALUES ($1,$2,$3::jsonb,true) RETURNING id`, [actor.restaurantId, actor.userId, JSON.stringify(validated.data)]);
+        await tx.query(`INSERT INTO visual_review_assets (review_id, restaurant_id, asset_id, position)
+          SELECT $1, $2, x.id, (x.ordinality-1)::int FROM unnest($3::uuid[]) WITH ORDINALITY AS x(id, ordinality)`,
+          [review!.id, actor.restaurantId, parsed.data.ids]);
+        return review!.id;
+      });
+      return res.json({ reviewId, review: validated.data, simulated: true });
     } catch (error) {
       if (!(error instanceof AiUnavailableError)) throw error;
       return res.status(503).json({ error: 'Practice photo review is unavailable or its budget limit was reached.' });

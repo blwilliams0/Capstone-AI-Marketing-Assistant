@@ -10,6 +10,7 @@ import {
 } from '@the-pocket/shared';
 import type { AuthContext } from '../types.js';
 import { buildContext } from './context.js';
+import { readAdvisorPreference } from './memory.js';
 import { ANSWER_SYSTEM, DRAFT_SYSTEM } from './prompts.js';
 import type { AiDocument, AiProvider } from './provider.js';
 import { monthToDateCostUsd, recordUsage, type AiTask } from './usage.js';
@@ -96,8 +97,12 @@ export async function ask(
 
   const ai = await guard(deps, actor, 'answer');
   const docs = await buildContext(db, actor.restaurantId, input.question);
+  const preference = await readAdvisorPreference(db, actor);
+  const question = preference.enabled
+    ? `Personal response preferences (presentation only): detail=${preference.detail}; workflow=${preference.workflow}.\n\nStaff question: ${input.question}`
+    : input.question;
   const res = await callProvider(deps, actor, 'answer', ai, () =>
-    ai.answer({ system: ANSWER_SYSTEM, documents: docs, question: input.question, history, effort: 'medium' }),
+    ai.answer({ system: ANSWER_SYSTEM, documents: docs, question, history, effort: 'medium' }),
   );
 
   const byKey = new Map(docs.map((d) => [d.key, d]));
