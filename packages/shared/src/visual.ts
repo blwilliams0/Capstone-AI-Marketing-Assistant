@@ -77,6 +77,7 @@ export const practicePhotoPresets = [
 
 
 export const visualEditRequestSchema = z.object({
+  conversationId: z.uuid().optional(),
   assetId: z.uuid(),
   request: z.string().trim().min(3).max(2000),
   currentRecipe: visualRecipeSchema,
@@ -104,6 +105,7 @@ export const visualStandardInputSchema = z.discriminatedUnion('kind', [
 export interface VisualStandard {
   itemId: string;
   versionId: string;
+  liveImageAllowed?: boolean;
   version: number;
   title: string;
   rationale: string;
@@ -116,6 +118,7 @@ export interface VisualStandard {
 }
 
 export const feedReviewRequestSchema = z.object({
+  layout: z.object({ id: z.uuid(), revision: z.number().int().positive() }).optional(),
   photos: z.array(z.object({ assetId: z.uuid(), existingFeed: z.boolean() })).min(2).max(9)
     .refine((photos) => new Set(photos.map((photo) => photo.assetId)).size === photos.length),
   privacyConfirmed: z.literal(true),
@@ -127,3 +130,12 @@ export const feedReviewResultSchema = z.object({
   uncertainty: z.string().trim().min(1).max(500),
 });
 export type FeedReviewResult = z.infer<typeof feedReviewResultSchema>;
+
+export interface SavedFeedEvaluation {
+  id: string;
+  layoutId: string | null;
+  layoutRevision: number | null;
+  photos: { assetId: string; existingFeed: boolean }[];
+  result: FeedReviewResult;
+  createdAt: string;
+}

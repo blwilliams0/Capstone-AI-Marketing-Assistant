@@ -1,8 +1,20 @@
 import { z } from 'zod';
 
+export const advisorDocumentSchema = z.object({
+  name: z.string().trim().min(5).max(100).regex(/^[^/\\<>\p{Cc}]+\.(txt|csv)$/iu),
+  content: z.string().trim().min(1).max(8000).refine((value) => !/[\p{Cc}\ufffd]/u.test(value.replace(/[\t\r\n]/g, ''))),
+});
+export type AdvisorDocument = z.infer<typeof advisorDocumentSchema>;
+
 export const askSchema = z.object({
   question: z.string().trim().min(3, 'Please write a question').max(2000),
   conversationId: z.string().uuid().optional(),
+  feedEvaluationId: z.uuid().optional(),
+  documents: z.array(advisorDocumentSchema).max(3).optional(),
+  documentPrivacyConfirmed: z.literal(true).optional(),
+  mode: z.enum(['brand_consistency', 'strategy']).optional(),
+}).refine((request) => !request.documents?.length || request.documentPrivacyConfirmed === true, {
+  message: 'Confirm that you are allowed to use these documents and they contain no private guest or employee information.',
 });
 export type AskRequest = z.infer<typeof askSchema>;
 

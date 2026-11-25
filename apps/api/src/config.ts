@@ -17,6 +17,8 @@ export interface Config {
   aiMode: 'claude' | 'mock' | 'disabled';
   aiMonthlyBudgetUsd: number;
   livePhotoAdvice: boolean;
+  liveReferenceImages: boolean;
+  evaluationMaxCalls?: number;
 }
 
 const envSchema = z.object({
@@ -28,6 +30,9 @@ const envSchema = z.object({
   SUPABASE_SECRET_KEY: z.string().min(1).optional(),
   DATABASE_URL: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  AI_ISOLATED_EVALUATION: z.enum(['true', 'false']).default('false'),
+  AI_LIVE_REFERENCE_IMAGES: z.enum(['true', 'false']).default('false'),
+  AI_EVALUATION_MAX_CALLS: z.coerce.number().int().min(1).max(20).default(5),
   AI_LIVE_PHOTO_ADVICE: z.enum(['true', 'false']).default('false'),
   AI_MONTHLY_BUDGET_USD: z.coerce.number().min(0).max(10_000).default(25),
 });
@@ -61,7 +66,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const anthropicApiKey = e.ANTHROPIC_API_KEY?.trim() || undefined;
-  const aiMode = anthropicApiKey && e.AUTH_MODE !== 'mock' ? 'claude' : MOCK_ALLOWED_ENVS.includes(nodeEnv) ? 'mock' : 'disabled';
+  const evaluation = e.AI_ISOLATED_EVALUATION === 'true';
+  if (evaluation && (!anthropicApiKey || nodeEnv !== 'development' || e.AUTH_MODE !== 'mock'
+    || e.DATABASE_URL !== 'postgresql://pocket_preview@127.0.0.1:55437/postgres'
+    || e.WEB_ORIGIN !== 'http://127.0.0.1:5173' || e.SUPABASE_URL || e.SUPABASE_SECRET_KEY
+    || e.AI_MONTHLY_BUDGET_USD <= 0 || e.AI_MONTHLY_BUDGET_USD > 5)) {
+    throw new Error('Live evaluation requires the isolated development launcher, an authorized key, and an estimated monthly budget above zero and at most $5.');
+  }
+  const aiMode = anthropicApiKey && (e.AUTH_MODE !== 'mock' || evaluation) ? 'claude' : MOCK_ALLOWED_ENVS.includes(nodeEnv) ? 'mock' : 'disabled';
 
   return {
     nodeEnv,
@@ -73,7 +85,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: e.DATABASE_URL,
     anthropicApiKey,
     aiMode,
-    livePhotoAdvice: e.AI_LIVE_PHOTO_ADVICE === 'true' && e.AUTH_MODE === 'supabase' && aiMode === 'claude',
+    livePhotoAdvice: e.AI_LIVE_PHOTO_ADVICE === 'true' && aiMode === 'claude',
+    liveReferenceImages: e.AI_LIVE_REFERENCE_IMAGES === 'true' && e.AI_LIVE_PHOTO_ADVICE === 'true' && aiMode === 'claude',
+    evaluationMaxCalls: evaluation ? e.AI_EVALUATION_MAX_CALLS : undefined,
     aiMonthlyBudgetUsd: e.AI_MONTHLY_BUDGET_USD,
   };
 }

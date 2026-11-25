@@ -10,7 +10,8 @@ const neutral = { exposure: 0, warmth: 0, contrast: 0, saturation: 0, highlights
 it('uses only eligible visual standards and preserves the current recipe in simulated revisions', async () => {
   const mock = createMockAiProvider();
   const requests: StructuredRequest<unknown>[] = [];
-  const h = await createHarness({ ai: { ...mock, async structured<T>(input: StructuredRequest<T>) {
+  let provider: 'mock' | 'anthropic' = 'mock';
+  const h = await createHarness({ livePhotoAdvice: true, liveReferenceImages: true, ai: { ...mock, get name() { return provider; }, async structured<T>(input: StructuredRequest<T>) {
     requests.push(input as StructuredRequest<unknown>);
     if (input.prompt.includes('malformed fixture')) {
       return { data: { recipe: { ...neutral, warmth: 50 }, rationale: 'Invalid fixture' } as T, usage: {
@@ -40,6 +41,10 @@ it('uses only eligible visual standards and preserves the current recipe in simu
     expect(proposed.status).toBe(201);
     expect((await post(employee.token, '/knowledge/versions/' + proposed.body.versionId + '/approve').send({})).status).toBe(403);
     expect((await post(admin.token, '/knowledge/versions/' + proposed.body.versionId + '/approve').send({})).status).toBe(200);
+    const permissionEndpoint = '/visual/standards/' + proposed.body.versionId + '/image-permission';
+    expect((await post(admin.token, permissionEndpoint).send({ allowed: true })).status).toBe(404);
+    expect((await post(employee.token, permissionEndpoint).send({ allowed: true })).status).toBe(200);
+    expect((await post(employee.token, permissionEndpoint).send({ allowed: false })).status).toBe(200);
     expect((await post(employee.token, '/knowledge/' + proposed.body.itemId + '/versions').send({ body: 'Bypass' })).status).toBe(409);
 
     const preset = { kind: 'preset', title: 'Window preset', category: 'Patio', rationale: 'A bounded warm look.', recipe: { ...neutral, warmth: 0.30 } };
@@ -66,6 +71,16 @@ it('uses only eligible visual standards and preserves the current recipe in simu
     expect(revision.body.recipe).toMatchObject({ warmth: 0.18, crop: 'square', presetVersionId: first.body.versionId });
     expect((await post(employee.token, '/visual/edit-advice').send({ ...input, request: 'malformed fixture' })).status).toBe(422);
     expect((await post(employee.token, '/visual/edit-advice').send({ ...input, privacyConfirmed: false })).status).toBe(400);
+    await h.db.query("UPDATE visual_collections SET archived_at = now() WHERE name = 'Samples'");
+    expect((await post(employee.token, '/visual/edit-advice').send(input)).status).toBe(200);
+    expect(requests.at(-1)!.images).toHaveLength(1);
+    provider = 'anthropic';
+    await h.db.query("UPDATE visual_collections SET archived_at = null WHERE name = 'Samples'");
+    expect((await post(employee.token, '/visual/edit-advice').send(input)).body.simulated).toBe(false);
+    expect(requests.at(-1)!.images).toHaveLength(1);
+    expect((await post(employee.token, permissionEndpoint).send({ allowed: true })).status).toBe(200);
+    expect((await post(employee.token, '/visual/edit-advice').send(input)).body.simulated).toBe(false);
+    expect(requests.at(-1)!.images).toHaveLength(2);
     await h.db.query("UPDATE visual_collections SET archived_at = now() WHERE name = 'Samples'");
     expect((await post(employee.token, '/visual/edit-advice').send(input)).status).toBe(200);
     expect(requests.at(-1)!.images).toHaveLength(1);

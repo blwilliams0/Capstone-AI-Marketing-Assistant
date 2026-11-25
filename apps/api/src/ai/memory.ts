@@ -93,4 +93,14 @@ export function addMemoryRoutes(router: PolicyRouter, db: Db) {
     return res.json({ itemIds: entries.map((item) => item.itemId) });
   });
 
+  router.get('/assistant/learning-patterns', 'brand.approve', async (req, res) => {
+    const { restaurantId } = req.auth!;
+    const patterns = await db.query<{ topic: string; submissions: number }>(`SELECT lower(trim(i.title)) AS topic, count(*)::int AS submissions
+      FROM audit_events a JOIN knowledge_items i ON i.id::text = a.details->>'itemId'
+      WHERE a.restaurant_id = $1 AND i.restaurant_id = $1 AND a.action = 'advisor.learning_proposed'
+        AND a.created_at > now() - interval '90 days'
+      GROUP BY lower(trim(i.title)) HAVING count(*) > 1 ORDER BY submissions DESC, topic LIMIT 15`, [restaurantId]);
+    return res.json({ patterns });
+  });
+
 }

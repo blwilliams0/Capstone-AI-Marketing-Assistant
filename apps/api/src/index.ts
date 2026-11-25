@@ -41,7 +41,7 @@ const authAdmin =
 
 const ai =
   config.aiMode === 'claude'
-    ? createClaudeAiProvider(createClaudeClient(config.anthropicApiKey!))
+    ? createClaudeAiProvider(createClaudeClient(config.anthropicApiKey!, config.evaluationMaxCalls !== undefined), config.evaluationMaxCalls !== undefined)
     : config.aiMode === 'mock'
       ? createMockAiProvider()
       : null;
@@ -59,7 +59,7 @@ if (config.supabaseUrl && config.supabaseSecretKey) {
     .catch((err: unknown) => console.error(JSON.stringify({ level: 'error', msg: 'photo storage check failed', error: err instanceof Error ? err.message : String(err) })));
 }
 
-const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd, livePhotoAdvice: config.livePhotoAdvice, media });
+const { app } = createApp({ db, authenticator, authAdmin, webOrigin: config.webOrigin, ai, aiBudgetUsd: config.aiMonthlyBudgetUsd, practiceInstagram: config.authMode === 'mock', livePhotoAdvice: config.livePhotoAdvice, liveReferenceImages: config.liveReferenceImages, evaluationMaxCalls: config.evaluationMaxCalls, media });
 
 const hostname = config.authMode === 'mock' ? '127.0.0.1' : '0.0.0.0';
 const server = app.listen(config.port, hostname, () => {

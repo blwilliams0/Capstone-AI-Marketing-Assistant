@@ -49,14 +49,14 @@ function historyText(history: AnswerRequest['history']): ContentBlock[] {
   return [{ type: 'text', text: `Earlier in this conversation (for context only):\n\n${text}` }];
 }
 
-export function createClaudeAiProvider(client: ClaudeClient): AiProvider {
+export function createClaudeAiProvider(client: ClaudeClient, evaluation = false): AiProvider {
   return {
     name: 'anthropic',
 
     async answer(req) {
       const response = await client.beta.messages.create({
         model: CLAUDE_MODEL,
-        max_tokens: 4000,
+        max_tokens: evaluation ? 1800 : 4000,
         betas: [FALLBACK_BETA],
         fallbacks: 'default',
         inference_geo: 'us',
@@ -95,7 +95,7 @@ export function createClaudeAiProvider(client: ClaudeClient): AiProvider {
       const response = await client.beta.messages.parse(
         {
           model: CLAUDE_MODEL,
-          max_tokens: req.maxTokens ?? 8000,
+          max_tokens: evaluation ? Math.min(req.maxTokens ?? 2400, 2400) : req.maxTokens ?? 8000,
           betas: [FALLBACK_BETA],
           fallbacks: 'default',
           inference_geo: 'us',
@@ -110,7 +110,7 @@ export function createClaudeAiProvider(client: ClaudeClient): AiProvider {
             { type: 'text', text: req.prompt },
           ] }],
         },
-        long ? { timeout: 300_000, maxRetries: 1 } : undefined,
+        long && !evaluation ? { timeout: 300_000, maxRetries: 1 } : undefined,
       );
       const refused = response.stop_reason === 'refusal';
       const truncated = response.stop_reason === 'max_tokens';
@@ -125,6 +125,6 @@ export function createClaudeAiProvider(client: ClaudeClient): AiProvider {
   };
 }
 
-export function createClaudeClient(apiKey: string): ClaudeClient {
-  return new Anthropic({ apiKey, maxRetries: 2, timeout: 120_000 });
+export function createClaudeClient(apiKey: string, evaluation = false): ClaudeClient {
+  return new Anthropic({ apiKey, maxRetries: evaluation ? 0 : 2, timeout: evaluation ? 45_000 : 120_000 });
 }

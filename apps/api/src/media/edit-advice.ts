@@ -3,6 +3,7 @@ import { practicePhotoPresets, visualEditRequestSchema, visualEditResultSchema, 
 import type { RequestHandler } from 'express';
 import { guard, callProvider, AiUnavailableError, type AiDeps } from '../ai/assistant.js';
 import { buildContext } from '../ai/context.js';
+import { readAdvisorPreference } from '../ai/memory.js';
 import { recordUsage } from '../ai/usage.js';
 import type { PolicyRouter } from '../policy.js';
 import { approvedReferenceImages, approvedVisualContext } from './standards.js';
@@ -43,13 +44,22 @@ export function mockEditAdvice(input: { request: string; currentRecipe: VisualEd
   };
 }
 
-export function addEditAdviceRoute(router: PolicyRouter, deps: AiDeps, limit: RequestHandler, liveEnabled = false) {
+export function addEditAdviceRoute(router: PolicyRouter, deps: AiDeps, limit: RequestHandler, liveEnabled = false, liveReferences = false) {
   router.post('/visual/edit-advice', 'assistant.use', limit, async (req, res) => {
     const parsed = visualEditRequestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Choose a photo, enter an edit request and confirm the privacy check.' });
     if (!deps.ai || (deps.ai.name !== 'mock' && !liveEnabled)) return res.status(503).json({ error: 'Photo editing advice is unavailable in this environment.' });
     const actor = req.auth!;
     if (!actor.capabilities.includes('content.draft')) return res.status(403).json({ error: 'Photo access denied.' });
+    const { conversationId } = parsed.data;
+    let conversation: { role: string; content: string }[] = [];
+    if (conversationId) {
+      const [owned] = await deps.db.query('SELECT id FROM conversations WHERE id = $1 AND restaurant_id = $2 AND user_id = $3',
+        [conversationId, actor.restaurantId, actor.userId]);
+      if (!owned) return res.status(404).json({ error: 'Conversation unavailable.' });
+      conversation = (await deps.db.query<{ role: string; content: string }>(`SELECT role, left(content, 600) AS content
+        FROM conversation_messages WHERE conversation_id = $1 ORDER BY seq DESC LIMIT 4`, [conversationId])).reverse();
+    }
     const [asset] = await deps.db.query<{ bytes: string }>(
       `SELECT encode(a.image_bytes, 'base64') AS bytes FROM visual_assets a WHERE ${visibleAsset} AND a.id = $4`,
       [actor.restaurantId, actor.userId, actor.role === 'admin', parsed.data.assetId],
@@ -63,14 +73,15 @@ export function addEditAdviceRoute(router: PolicyRouter, deps: AiDeps, limit: Re
       const documents = await buildContext(deps.db, actor.restaurantId, parsed.data.request);
       const visualStandards = await approvedVisualContext(deps.db, actor);
       // Approved brand use and permission to transmit a reference externally are separate.
-      const references = provider.name === 'mock'
-        ? await approvedReferenceImages(deps.db, actor, parsed.data.assetId, parsed.data.request) : [];
+      const references = provider.name === 'mock' || liveReferences
+        ? await approvedReferenceImages(deps.db, actor, parsed.data.assetId, parsed.data.request, provider.name !== 'mock') : [];
+      const preference = await readAdvisorPreference(deps.db, actor);
       const referenceImages = await Promise.all(references.map(async ({ bytes }) => ({
         mediaType: 'image/jpeg' as const, bytes: await normalize(bytes),
       })));
       const result = await callProvider(deps, actor, 'photo_review', provider, () => provider.structured({
         system: SYSTEM, documents, images: [{ mediaType: 'image/jpeg', bytes }, ...referenceImages],
-        prompt: JSON.stringify({ request: parsed.data.request, currentRecipe: parsed.data.currentRecipe, previousRequests: parsed.data.previousRequests ?? [], approvedVisualStandards: visualStandards, referenceImageOrder: references.map((item) => item.versionId) }),
+        prompt: JSON.stringify({ request: parsed.data.request, currentRecipe: parsed.data.currentRecipe, previousRequests: parsed.data.previousRequests ?? [], conversation, preferences: preference.enabled ? preference : undefined, approvedVisualStandards: visualStandards, referenceImageOrder: references.map((item) => item.versionId) }),
         schema: visualEditResultSchema, effort: 'low', maxTokens: 2000, mock: () => mockEditAdvice(parsed.data, visualStandards),
       }));
       const checked = visualEditResultSchema.safeParse(result.data);

@@ -37,6 +37,16 @@ it('passes a normalized grid in display order and never calls the provider for i
     expect(calls).toHaveLength(0);
     const response = await post(owner.token, endpoint).send({ photos, privacyConfirmed: true });
     expect(response.status).toBe(200);
+    expect(response.body.evaluation.photos).toEqual(photos);
+    const history = (token: string) => request(h.app).get('/api/visual/feed-reviews').auth(token, { type: 'bearer' });
+    expect((await history(owner.token)).body.evaluations[0].id).toBe(response.body.evaluation.id);
+    expect((await history(peer.token)).body.evaluations).toEqual([]);
+    const discuss = { question: 'What should I try next?', feedEvaluationId: response.body.evaluation.id };
+    expect((await post(peer.token, '/api/assistant/ask').send(discuss)).status).toBe(404);
+    const discussion = await post(owner.token, '/api/assistant/ask').send(discuss);
+    expect(discussion.status).toBe(200);
+    expect(await h.db.query('SELECT feed_evaluation_id FROM conversations WHERE id = $1', [discussion.body.conversationId]))
+      .toEqual([{ feed_evaluation_id: response.body.evaluation.id }]);
     expect(response.body.simulated).toBe(true);
     expect(JSON.parse(calls[0]!.prompt).order).toEqual([{ position: 1, existingFeed: true }, { position: 2, existingFeed: false }]);
     for (const [index, image] of calls[0]!.images!.entries()) {

@@ -17,7 +17,12 @@ if [[ ! -x "$pg_bin/initdb" || ! -x "$pg_bin/pg_ctl" ]]; then
 fi
 
 # A dedicated cluster and fixed loopback ports keep the preview separate from team services.
+evaluation="${POCKET_PREVIEW_LIVE_EVALUATION:-false}"
 preview_dir="$PWD/.tmp/preview"
+if [[ "$evaluation" == true ]]; then
+  preview_dir="$PWD/.tmp/live-evaluation"
+  echo "Live evaluation selected. Use fictional, non-sensitive data only."
+fi
 pg_data="$preview_dir/postgres"
 pg_port=55437
 api_port=5300
@@ -47,7 +52,11 @@ echo "Starting local PostgreSQL…"
 started_pg=yes
 
 export DATABASE_URL="postgresql://pocket_preview@127.0.0.1:$pg_port/postgres"
-export NODE_ENV=development AUTH_MODE=mock ANTHROPIC_API_KEY='' SUPABASE_PUBLISHABLE_KEY=''
+export NODE_ENV=development AUTH_MODE=mock SUPABASE_PUBLISHABLE_KEY=''
+export AI_ISOLATED_EVALUATION="$evaluation"
+if [[ "$evaluation" != true ]]; then
+  export ANTHROPIC_API_KEY='' AI_LIVE_PHOTO_ADVICE=false AI_LIVE_REFERENCE_IMAGES=false
+fi
 export API_PORT="$api_port" WEB_ORIGIN="http://127.0.0.1:$web_port" VITE_API_URL=''
 export POCKET_PREVIEW_MEDIA_DIR="$preview_dir/media"
 export POCKET_PREVIEW_PROXY="http://127.0.0.1:$api_port"

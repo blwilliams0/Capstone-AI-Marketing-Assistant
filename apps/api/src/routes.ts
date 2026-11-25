@@ -6,6 +6,8 @@ import { recordAudit } from './audit.js';
 import type { AuthAdmin } from './auth/auth-admin.js';
 import { PolicyRouter } from './policy.js';
 import { addKnowledgeRoutes } from './knowledge/routes.js';
+import { addPracticeInstagramRoutes } from './instagram/practice.js';
+import type { AiDeps } from './ai/assistant.js';
 import { addAssistantRoutes } from './ai/routes.js';
 import { addContentRoutes } from './content/routes.js';
 import { addInterviewRoutes } from './interview/routes.js';
@@ -27,7 +29,10 @@ export interface RouteDeps {
   /** null: AI routes answer 503 (no provider configured). */
   ai: AiProvider | null;
   aiBudgetUsd: number;
+  practiceInstagram?: boolean;
   livePhotoAdvice?: boolean;
+  liveReferenceImages?: boolean;
+  evaluationMaxCalls?: number;
   media?: MediaStore;
   /** Extra per-user limit for routes that call the AI (they cost money). */
   aiLimit: RequestHandler;
@@ -207,13 +212,15 @@ export function buildRoutes(deps: RouteDeps): PolicyRouter {
   addCalendarRoutes(r, db);
   addMediaRoutes(r, db, deps.media);
   addCollectionRoutes(r, db);
+  addPracticeInstagramRoutes(r, db, deps.practiceInstagram === true);
   addMemoryRoutes(r, db);
   addVisualStandardRoutes(r, db);
-  addVisualRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
-  addFeedReviewRoute(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
-  addEditAdviceRoute(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit, deps.livePhotoAdvice);
-  addInterviewRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
-  addAssistantRoutes(r, { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd }, deps.aiLimit);
+  const aiDeps: AiDeps = { db, ai: deps.ai, budgetUsd: deps.aiBudgetUsd, evaluationMaxCalls: deps.evaluationMaxCalls };
+  addVisualRoutes(r, aiDeps, deps.aiLimit);
+  addFeedReviewRoute(r, aiDeps, deps.aiLimit);
+  addEditAdviceRoute(r, aiDeps, deps.aiLimit, deps.livePhotoAdvice, deps.liveReferenceImages);
+  addInterviewRoutes(r, aiDeps, deps.aiLimit);
+  addAssistantRoutes(r, aiDeps, deps.aiLimit);
 
   return r;
 }

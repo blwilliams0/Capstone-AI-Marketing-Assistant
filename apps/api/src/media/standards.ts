@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { recordAudit } from '../audit.js';
 import type { Db } from '@the-pocket/db';
 import { visualStandardInputSchema, type VisualStandard } from '@the-pocket/shared';
 import { createItemTx, proposeVersionTx } from '../knowledge/service.js';
@@ -10,16 +12,40 @@ export function addVisualStandardRoutes(router: PolicyRouter, db: Db) {
     const actor = req.auth!;
     const standards = await db.query<VisualStandard>(`SELECT
       i.id AS "itemId", v.id AS "versionId", i.title, v.body AS rationale, v.version, v.status,
-      s.kind, s.asset_id AS "assetId", s.classification, s.category, s.recipe
+      s.kind, s.asset_id AS "assetId", s.classification, s.category, s.recipe,
+      COALESCE(p.allowed, false) AS "liveImageAllowed"
       FROM visual_standards s JOIN knowledge_versions v ON v.id = s.version_id
       JOIN knowledge_items i ON i.id = v.item_id
       LEFT JOIN visual_assets a ON a.id = s.asset_id
+      LEFT JOIN reference_image_permissions p ON p.version_id = v.id
       WHERE s.restaurant_id = $1 AND i.retired_at IS NULL
       AND (v.expires_at IS NULL OR v.expires_at > now())
       AND (v.status = 'approved' OR v.proposed_by = $2 OR $3::boolean)
       AND (s.asset_id IS NULL OR (${visibleAsset}))
       ORDER BY i.title, v.version DESC`, [actor.restaurantId, actor.userId, actor.role === 'admin']);
     return res.json({ standards });
+  });
+
+  router.post('/visual/standards/:id/image-permission', 'knowledge.propose', async (req, res) => {
+    const input = z.object({ id: z.uuid(), allowed: z.boolean() }).safeParse({ id: req.params.id, allowed: req.body?.allowed });
+    if (!input.success) return res.status(400).json({ error: 'Choose a reference version and confirm the permission.' });
+    const actor = req.auth!;
+    const permitted = await db.transaction(async (tx) => {
+      const [owner] = await tx.query(`SELECT v.id FROM visual_standards s JOIN knowledge_versions v ON v.id = s.version_id
+        JOIN knowledge_items i ON i.id = v.item_id JOIN visual_assets a ON a.id = s.asset_id
+        WHERE s.restaurant_id = $1 AND a.owner_id = $2 AND s.version_id = $3
+          AND ($4::boolean = false OR (v.status = 'approved' AND i.retired_at IS NULL
+            AND (v.expires_at IS NULL OR v.expires_at > now()) AND s.classification = 'on_brand'))`,
+      [actor.restaurantId, actor.userId, input.data.id, input.data.allowed]);
+      if (!owner) return false;
+      await tx.query(`INSERT INTO reference_image_permissions (version_id, allowed) VALUES ($1, $2)
+        ON CONFLICT (version_id) DO UPDATE SET allowed = EXCLUDED.allowed, changed_at = now()`, [input.data.id, input.data.allowed]);
+      await recordAudit(tx, { restaurantId: actor.restaurantId, actorUserId: actor.userId, action: 'visual.reference_image_permission',
+        targetType: 'knowledge_version', targetId: input.data.id, details: { allowed: input.data.allowed }, requestId: req.requestId });
+      return true;
+    });
+    if (!permitted) return res.status(404).json({ error: 'An eligible reference version owned by you is required.' });
+    return res.json({ allowed: input.data.allowed });
   });
 
   router.post('/visual/standards', 'knowledge.propose', async (req, res) => {
@@ -73,14 +99,17 @@ export async function approvedVisualContext(db: Db, actor: AuthContext) {
 }
 
 /** Images are restricted to current, on-brand standards still shared with the team. */
-export async function approvedReferenceImages(db: Db, actor: AuthContext, assetId: string, request: string) {
+export async function approvedReferenceImages(db: Db, actor: AuthContext, assetId: string, request: string, requireConsent = false) {
   return db.query<{ versionId: string; bytes: string }>(`SELECT v.id AS "versionId", encode(a.image_bytes, 'base64') AS bytes
     FROM visual_standards s JOIN knowledge_versions v ON v.id = s.version_id
     JOIN knowledge_items i ON i.id = v.item_id JOIN visual_assets a ON a.id = s.asset_id
     WHERE s.restaurant_id = $1 AND i.retired_at IS NULL AND v.status = 'approved'
+      AND (NOT $6::boolean OR EXISTS (
+        SELECT 1 FROM reference_image_permissions p WHERE p.version_id = v.id AND p.allowed
+      ))
       AND s.kind = 'reference' AND s.classification = 'on_brand' AND a.id <> $4
       AND (v.expires_at IS NULL OR v.expires_at > now()) AND ${visibleAsset} AND ${albumGrant}
     ORDER BY ts_rank(to_tsvector('english', i.title || ' ' || s.category || ' ' || v.body), plainto_tsquery('english', $5)) DESC,
       v.decided_at DESC, v.id LIMIT 2`,
-  [actor.restaurantId, actor.userId, false, assetId, request]);
+  [actor.restaurantId, actor.userId, false, assetId, request, requireConsent]);
 }
