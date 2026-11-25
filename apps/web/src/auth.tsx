@@ -32,7 +32,7 @@ export const supabase: SupabaseClient | null =
 
 type Status = 'loading' | 'signed_out' | 'needs_password' | 'ready' | 'no_access' | 'error';
 
-type ApiOptions = { method?: string; body?: unknown; headers?: Record<string, string> };
+type ApiOptions = { method?: string; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal };
 
 interface AuthState {
   status: Status;
@@ -84,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       return await fetch(`${__API_URL__}${path}`, {
         method: init?.method ?? 'GET',
+        signal: init?.signal,
         headers,
         body: body instanceof Blob ? body : body !== undefined ? JSON.stringify(body) : undefined,
       });

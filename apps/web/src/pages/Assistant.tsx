@@ -1,9 +1,10 @@
+import { Composer } from '../advisor/Composer';
 import { AdvisorFeedback, AdvisorPreferences } from '../visual/AdvisorMemory';
-import { Link, useLocation } from 'react-router';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { KNOWLEDGE_KIND_LABELS, type AskResponse, type AssistantStatus, type KnowledgeKind, type SourceRef } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
-import { Alert, buttonClass, inputClass, secondaryButtonClass } from '../ui';
+import { Alert, secondaryButtonClass } from '../ui';
 import { VisualWorkspace } from './VisualStudio';
 
 interface Turn {
@@ -30,13 +31,17 @@ const kindName = (k: string) => KNOWLEDGE_KIND_LABELS[k as KnowledgeKind]?.name 
 
 export function Assistant() {
   const location = useLocation();
+  const navigate = useNavigate();
   const handoff = location.state as { question?: string; assetId?: string } | null;
   const { apiFetch, me } = useAuth();
   const canDraft = me?.capabilities.includes('content.draft') ?? false;
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
-  const [question, setQuestion] = useState(handoff?.assetId ? '' : handoff?.question ?? '');
+  const [question, setQuestion] = useState('');
+  const [photoTask, setPhotoTask] = useState<{ assetId: string; question: string; key: string }>();
+  const request = useRef<AbortController | null>(null);
+  const consumed = useRef<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,25 +84,50 @@ export function Assistant() {
     }
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (busy || opening || question.trim().length < 3 || !status?.available) return;
+  const submit = useCallback(async (text: string, id?: string) => {
+    if (request.current || text.trim().length < 3) return;
+    const controller = new AbortController();
+    request.current = controller;
+    setQuestion(text);
     setBusy(true);
     setError(null);
     try {
-      const res = await apiFetch('/api/assistant/ask', { method: 'POST', body: { question, conversationId } });
+      const res = await apiFetch('/api/assistant/ask', {
+        method: 'POST', body: { question: text, conversationId: id }, signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       if (!res.ok) return setError(await readError(res));
       const out = (await res.json()) as AskResponse;
-      setTurns((previous) => [...previous, { question, answer: out.answer, sources: out.sources, consulted: out.consulted }]);
+      if (controller.signal.aborted) return;
+      setTurns((previous) => [...previous, { question: text, answer: out.answer, sources: out.sources, consulted: out.consulted }]);
       setConversationId(out.conversationId);
-      setQuestion('');
-      if (!conversationId) void loadHistory().catch(() => setError('The reply was saved, but the history could not refresh.'));
+      setQuestion((current) => current === text ? '' : current);
+      if (!id) void loadHistory().catch(() => setError('The reply was saved, but the history could not refresh.'));
     } catch {
-      setError('Could not send the question. Try again.');
+      if (!controller.signal.aborted) setError('Could not send the question. Try again.');
     } finally {
-      setBusy(false);
+      if (request.current === controller) {
+        request.current = null;
+        setBusy(false);
+      }
     }
-  }
+  }, [apiFetch, loadHistory]);
+
+  useEffect(() => () => request.current?.abort(), []);
+
+  useEffect(() => {
+    if (!handoff?.question || consumed.current === location.key) return;
+    if (!handoff.assetId && !status) return;
+    consumed.current = location.key;
+    if (handoff.assetId && __MOCK_AUTH__ && canDraft) {
+      setPhotoTask({ assetId: handoff.assetId, question: handoff.question, key: location.key });
+    } else if (status?.available) {
+      void submit(handoff.question);
+    } else {
+      setQuestion(handoff.question);
+    }
+    navigate(location.pathname, { replace: true, state: null });
+  }, [handoff, status, location.key, location.pathname, navigate, submit, canDraft]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
@@ -174,43 +204,29 @@ export function Assistant() {
           </div>
         ))}
 
-        <form onSubmit={submit} className="sticky bottom-0 space-y-2 rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm">
-          <textarea
-            aria-label="Marketing question"
-            disabled={busy || opening}
-            className={`${inputClass} min-h-24`}
-            placeholder="Ask a marketing question…"
-            value={question}
-            maxLength={2000}
-            onChange={(e) => setQuestion(e.target.value)}
-          />
-          {error && <Alert kind="error">{error}</Alert>}
-          <div className="flex gap-2">
-            <button className={buttonClass} disabled={busy || opening || question.trim().length < 3 || !status?.available}>
-              {busy ? 'Thinking…' : 'Ask'}
-            </button>
-            {(conversationId || question) && (
-              <button
-                type="button"
-                className={secondaryButtonClass}
-                disabled={busy || opening}
-                onClick={() => {
-                  setError(null);
-                  setQuestion('');
-                  setTurns([]);
-                  setConversationId(undefined);
-                }}
-              >
-                New conversation
-              </button>
-            )}
-          </div>
-        </form>
+        {error && <Alert kind="error">{error}</Alert>}
+        <Composer value={question} onChange={setQuestion} pending={busy} autoFocus
+          attachmentTools={__MOCK_AUTH__ && canDraft} disabled={opening || !status?.available}
+          onSend={(text, photo) => {
+            if (photo) {
+              setPhotoTask({ assetId: photo.id, question: text, key: crypto.randomUUID() });
+              setQuestion('');
+            } else void submit(text, conversationId);
+          }}>
+          {busy && <button type="button" className="text-sm underline" onClick={() => request.current?.abort()}>Cancel response display</button>}
+        </Composer>
+        {(conversationId || question || photoTask) && <button type="button" className={secondaryButtonClass} disabled={busy || opening} onClick={() => {
+          setError(null);
+          setQuestion('');
+          setTurns([]);
+          setConversationId(undefined);
+          setPhotoTask(undefined);
+        }}>New conversation</button>}
       </div>
 
-      {__MOCK_AUTH__ && canDraft && <details open={handoff?.assetId ? true : undefined} className="order-last rounded-lg border border-studio-linen bg-studio-pearl p-4 xl:col-span-2">
-        <summary className="cursor-pointer font-semibold">Review photos in AI Advisor</summary>
-        <div className="mt-4"><VisualWorkspace advisor initialAssetId={handoff?.assetId} initialPrompt={handoff?.assetId ? handoff.question : undefined} /></div>
+      {__MOCK_AUTH__ && canDraft && <details key={photoTask?.key} open={photoTask ? true : undefined} className="order-last rounded-lg border border-studio-linen bg-studio-pearl p-4 xl:col-span-2">
+        <summary className="cursor-pointer font-semibold">Photos in AI Advisor</summary>
+        <div className="mt-4"><VisualWorkspace advisor initialAssetId={photoTask?.assetId} initialPrompt={photoTask?.question} /></div>
       </details>}
       <aside className="self-start space-y-2 rounded-xl border border-stone-200 bg-white p-4">
         <AdvisorPreferences />

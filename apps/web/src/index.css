@@ -49,3 +49,12 @@
     box-shadow: 0 0 0 3px var(--color-studio-pearl);
   }
 }
+
+@keyframes studio-stir {
+  0%, 100% { transform: rotate(-17deg) translateX(-2px); }
+  50% { transform: rotate(17deg) translateX(2px); }
+}
+.studio-spoon { transform-origin: 20px 23px; animation: studio-stir 1.25s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .studio-spoon { animation: none; }
+}

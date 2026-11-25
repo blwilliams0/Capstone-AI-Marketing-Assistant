@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
-import { useEffect, useState } from 'react';
-import type { PostDetail, PostSummary, VisualAsset, VisualCollection } from '@the-pocket/shared';
+import { useEffect, useRef, useState } from 'react';
+import type { FeedReviewResult, PostDetail, PostSummary, VisualAsset, VisualCollection } from '@the-pocket/shared';
+import { ThinkingBowl } from '../advisor/Composer';
 import { readError, useAuth } from '../auth';
 import { CollectionVisibility } from '../visual/AlbumManager';
 import { Alert, buttonClass, Card, inputClass, secondaryButtonClass } from '../ui';
@@ -11,7 +12,7 @@ interface Tile {
   endpoint: string;
 }
 
-function FeedImage({ tile }: { tile: Tile }) {
+function FeedImage({ tile, larger = false }: { tile: Tile; larger?: boolean }) {
   const { apiFetch } = useAuth();
   const [url, setUrl] = useState<string>();
   useEffect(() => {
@@ -33,8 +34,8 @@ function FeedImage({ tile }: { tile: Tile }) {
     return () => { alive = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [apiFetch, tile.endpoint]);
 
-  return <div className="aspect-square overflow-hidden bg-studio-linen">
-    {url ? <img alt={tile.label} src={url} className="h-full w-full object-cover" />
+  return <div className={larger ? "overflow-hidden bg-studio-linen" : "aspect-square overflow-hidden bg-studio-linen"}>
+    {url ? <img alt={tile.label} src={url} className={larger ? "max-h-[65vh] w-full object-contain" : "h-full w-full object-cover"} />
       : <p className="grid h-full place-items-center p-2 text-center text-xs text-studio-muted">Preview unavailable or loading</p>}
   </div>;
 }
@@ -47,7 +48,7 @@ function savedPlan(key: string): string[] {
 }
 
 function Planner({ storageKey }: { storageKey: string }) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, me } = useAuth();
   const [ids, setIds] = useState(() => savedPlan(storageKey));
   const [layouts, setLayouts] = useState<VisualCollection[]>([]);
   const [albums, setAlbums] = useState<VisualCollection[]>([]);
@@ -62,6 +63,14 @@ function Planner({ storageKey }: { storageKey: string }) {
   const [assets, setAssets] = useState<VisualAsset[]>([]);
   const [published, setPublished] = useState<Tile[]>([]);
   const [includePublished, setIncludePublished] = useState(true);
+  const [preview, setPreview] = useState<Tile>();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [review, setReview] = useState<{ snapshot: string; data: FeedReviewResult }>();
+  const [reviewing, setReviewing] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
+  useEffect(() => {
+    if (preview && dialog.current && !dialog.current.open) dialog.current.showModal();
+  }, [preview]);
   const [pick, setPick] = useState('');
   const [error, setError] = useState('');
   const [storageError, setStorageError] = useState('');
@@ -176,6 +185,23 @@ function Planner({ storageKey }: { storageKey: string }) {
   const available = assets.filter((item) => !ids.includes(item.id) && (!album || album.items.some((photo) => photo.assetId === item.id)));
   const editable = !layout || layout.editable;
 
+  const reviewPhotos = planned.slice(0, 9).map((photo) => ({ assetId: photo.id, existingFeed: existingIds.includes(photo.id) }));
+  const snapshot = JSON.stringify(reviewPhotos);
+
+  async function reviewFeed() {
+    if (reviewing || !privacy || reviewPhotos.length < 2) return;
+    setReviewing(true);
+    setReview(undefined);
+    setError('');
+    try {
+      const response = await apiFetch('/api/visual/feed-review', { method: 'POST', body: { photos: reviewPhotos, privacyConfirmed: privacy } });
+      if (!response.ok) throw new Error(await readError(response));
+      setReview({ snapshot, data: await response.json() as FeedReviewResult });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not review this grid.');
+    } finally { setReviewing(false); }
+  }
+
   return <div className="space-y-5">
     <header>
       <h1 className="text-4xl font-semibold">Feed Preview</h1>
@@ -221,6 +247,22 @@ function Planner({ storageKey }: { storageKey: string }) {
         </label>
       </div>
     </Card>
+    {__MOCK_AUTH__ && me?.capabilities.includes('assistant.use') && reviewPhotos.length >= 2 && <Card title="Practice feed review">
+      <p className="text-sm text-studio-muted">Reviews the first nine library photos in grid order. Recorded posts are excluded.</p>
+      <label className="my-2 flex gap-2 text-sm"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /> I have permission to use these photos and they contain no identifiable private information.</label>
+      <div className="flex items-center gap-2">
+        <button className={buttonClass} disabled={!privacy || reviewing} onClick={() => void reviewFeed()}>Run practice feed review</button>
+        {reviewing && <ThinkingBowl label="AI Advisor is preparing a practice feed review" />}
+      </div>
+      {review?.snapshot === snapshot && <div className="mt-3 space-y-2 text-sm" role="status">
+        <ul className="list-disc pl-5">{[...review.data.observations, ...review.data.suggestions].map((line, index) => <li key={index}>{line}</li>)}</ul>
+        <p>{review.data.uncertainty}</p>
+      </div>}
+    </Card>}
+    <dialog ref={dialog} className="m-auto w-[min(90vw,48rem)] rounded-lg border border-studio-ivory bg-studio-pearl p-4 backdrop:bg-studio-ink/60" aria-label={preview?.label ?? 'Feed photograph preview'} onClose={() => setPreview(undefined)}>
+      <form method="dialog" className="mb-3 flex justify-end"><button className={secondaryButtonClass} autoFocus>Close preview</button></form>
+      {preview && <FeedImage key={preview.id} tile={preview} larger />}
+    </dialog>
     {loading && <p role="status" className="text-sm text-studio-muted">Loading photos…</p>}
     {!loading && !planned.length && (!includePublished || !published.length)
       && <p className="text-sm text-studio-muted">Choose a library photo to start the grid.</p>}
@@ -228,7 +270,10 @@ function Planner({ storageKey }: { storageKey: string }) {
       {planned.map((item, index) => <article key={item.id} draggable={editable} onDragStart={() => setDragging(item.id)}
         onDragEnd={() => setDragging(undefined)} onDragOver={(event) => { if (editable && dragging) event.preventDefault(); }}
         onDrop={(event) => { event.preventDefault(); if (editable) drop(item.id); }} className="min-w-0 overflow-hidden rounded-md border border-studio-linen bg-studio-pearl">
-        <FeedImage tile={{ id: item.id, label: item.label, endpoint: `/api/visual/assets/${item.id}/image?size=thumb` }} />
+        <button type="button" className="block w-full" aria-label={`Preview ${item.label}`}
+          onClick={() => setPreview({ id: item.id, label: item.label, endpoint: `/api/visual/assets/${item.id}/image` })}>
+          <FeedImage tile={{ id: item.id, label: item.label, endpoint: `/api/visual/assets/${item.id}/image?size=thumb` }} />
+        </button>
         <div className="p-2">
           <p className="text-xs font-semibold text-studio-muted">{existingIds.includes(item.id) ? 'Manually supplied existing feed' : 'Planned'}</p>
           <p className="truncate text-sm">{item.label}</p>
@@ -256,7 +301,7 @@ function Planner({ storageKey }: { storageKey: string }) {
         </div>
       </article>)}
       {includePublished && published.map((item) => <article key={item.id} className="min-w-0 overflow-hidden rounded-md border border-studio-linen bg-studio-pearl">
-        <FeedImage tile={item} />
+        <button type="button" className="block w-full" aria-label={`Preview ${item.label}`} onClick={() => setPreview(item)}><FeedImage tile={item} /></button>
         <div className="p-2"><p className="text-xs font-semibold text-studio-muted">Recorded as posted</p><p className="truncate text-sm">{item.label}</p></div>
       </article>)}
     </div>

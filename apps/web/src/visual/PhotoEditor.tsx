@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VisualRecipe, VisualEditResult, VisualStandard } from '@the-pocket/shared';
+import { ThinkingBowl } from '../advisor/Composer';
 import { readError, useAuth } from '../auth';
 import { Alert, buttonClass, inputClass, secondaryButtonClass } from '../ui';
 import { exportPhoto, neutralRecipe, presets, renderPhoto } from './render';
@@ -9,17 +10,20 @@ const controls = [
   ['highlights', 'Highlights'], ['shadows', 'Shadows'], ['sharpness', 'Sharpness'],
 ] as const;
 
-export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt }: {
+export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt, onAutoEdit, adviceAssetId }: {
   url: string;
   assetId: string;
   initialRecipe?: VisualRecipe;
   initialPrompt?: string;
+  onAutoEdit?: () => void;
+  adviceAssetId?: string;
   save?: (image: Blob, edits: VisualRecipe, assetId: string) => Promise<void>;
 }) {
   const { apiFetch, me } = useAuth();
   const [recipe, setRecipe] = useState(initialRecipe ?? neutralRecipe);
   const [prompt, setPrompt] = useState(initialPrompt ?? '');
-  const [privacy, setPrivacy] = useState(false);
+  const [previousRequests, setPreviousRequests] = useState<string[]>([]);
+  const [privacy, setPrivacy] = useState(Boolean(initialPrompt));
   const [advice, setAdvice] = useState<VisualEditResult>();
   const [asking, setAsking] = useState(false);
   const [section, setSection] = useState<'Adjust' | 'Filters' | 'Crop'>('Adjust');
@@ -90,21 +94,31 @@ export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt }
     }
   }
 
-  async function askForEdit() {
+  const autoAsked = useRef(false);
+  const askForEdit = useCallback(async () => {
     setAsking(true);
     setError('');
     setAdvice(undefined);
     try {
       const response = await apiFetch('/api/visual/edit-advice', {
-        method: 'POST', body: { assetId, request: prompt, currentRecipe: recipe, privacyConfirmed: privacy },
+        method: 'POST', body: { assetId: adviceAssetId ?? assetId, request: prompt, currentRecipe: recipe, privacyConfirmed: privacy, previousRequests },
       });
       if (!response.ok) throw new Error(await readError(response));
       setAdvice(await response.json() as VisualEditResult);
+      setPreviousRequests((prior) => [...prior, prompt.trim().slice(0, 600)].slice(-3));
       setPrompt('');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not get practice editing advice.');
     } finally { setAsking(false); }
-  }
+  }, [apiFetch, assetId, adviceAssetId, prompt, recipe, privacy, previousRequests]);
+
+  useEffect(() => {
+    if (initialPrompt && !autoAsked.current) {
+      autoAsked.current = true;
+      onAutoEdit?.();
+      void askForEdit();
+    }
+  }, [initialPrompt, askForEdit, onAutoEdit]);
 
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_16rem]">
@@ -128,7 +142,7 @@ export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt }
             <textarea className={inputClass} value={prompt} maxLength={2000} placeholder="Make this a little warmer…" onChange={(event) => setPrompt(event.target.value)} />
           </label>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /> I have permission to use this image and it contains no identifiable private information.</label>
-          <button className={buttonClass} disabled={asking || !privacy || prompt.trim().length < 3}>Suggest practice adjustments</button>
+          <button className={buttonClass} disabled={asking || !privacy || prompt.trim().length < 3}>Suggest practice adjustments</button>{asking && <ThinkingBowl label="AI Advisor is preparing photo advice" />}
           {advice && <div role="status" className="space-y-2 text-sm">
             <p>{advice.rationale}</p>
             <button type="button" className={secondaryButtonClass} onClick={() => { setRecipe(advice.recipe); setBefore(false); setPreset(''); setAdvice(undefined); }}>Preview suggested adjustments</button>
