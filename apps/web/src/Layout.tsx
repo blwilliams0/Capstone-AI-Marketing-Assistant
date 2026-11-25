@@ -79,7 +79,7 @@ export function Layout() {
   function changeMode(next: typeof mode) {
     try { localStorage.setItem(preferenceKey, next); } catch { /* The layout still works for this visit. */ }
     setMode(next);
-    if (next === 'focus' || mode === 'focus') {
+    if (next === 'focus' || mode !== 'expanded') {
       requestAnimationFrame(() => (next === 'focus' ? restoreButton : collapseButton).current?.focus());
     }
   }
@@ -95,8 +95,6 @@ export function Layout() {
   return (
     <div className={`min-h-screen lg:grid ${mode === 'rail' ? 'lg:grid-cols-[4.75rem_minmax(0,1fr)]' : mode === 'focus' ? 'lg:grid-cols-[minmax(0,1fr)]' : 'lg:grid-cols-[15rem_minmax(0,1fr)]'}`}>
       <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:z-20 focus:bg-white focus:p-3">Skip to workspace</a>
-      {mode === 'focus' && <button ref={restoreButton} type="button" className="fixed right-5 top-3 z-10 hidden items-center gap-2 rounded-full border border-studio-taupe bg-studio-pearl px-3 py-2 text-sm lg:flex"
-        onClick={() => changeMode('expanded')}><StudioIcon name="menu" /> Show navigation</button>}
       <aside className={`bg-stone-900 text-stone-50 lg:sticky lg:top-0 lg:h-screen lg:flex-col lg:overflow-auto ${mode === 'focus' ? 'lg:hidden' : 'lg:flex'}`}
         onKeyDown={(event) => { if (event.key === 'Escape') closeMenu(); }}>
         <div className={`flex items-center justify-between px-5 py-4 lg:py-6 ${mode === 'rail' ? 'lg:justify-center lg:px-2' : ''}`}>
@@ -108,10 +106,6 @@ export function Layout() {
             aria-controls="studio-navigation" aria-expanded={open} onClick={() => setOpen(!open)}>
             {open ? 'Close menu' : 'Menu'}
           </button>
-        </div>
-        <div className="hidden justify-center gap-1 px-2 pb-3 lg:flex">
-          <button ref={collapseButton} type="button" className="rounded p-1 hover:bg-stone-700" title={mode === 'rail' ? 'Expand navigation' : 'Collapse navigation'} aria-label={mode === 'rail' ? 'Expand navigation' : 'Collapse navigation'} onClick={() => changeMode(mode === 'rail' ? 'expanded' : 'rail')}><StudioIcon name="rail" /></button>
-          <button type="button" className="rounded p-1 hover:bg-stone-700" title="Hide navigation" aria-label="Hide navigation" onClick={() => changeMode('focus')}><StudioIcon name="focus" /></button>
         </div>
         <div id="studio-navigation" className={`${open ? 'flex' : 'hidden'} flex-1 flex-col justify-between px-4 pb-5 lg:flex ${mode === 'rail' ? 'lg:px-2' : ''}`}>
           <nav aria-label="Studio" className="space-y-6">
@@ -150,8 +144,15 @@ export function Layout() {
             <button onClick={() => void signOut()} aria-label="Sign out" title="Sign out" className="mt-3 flex items-center gap-2 underline underline-offset-4"><StudioIcon name="exit" /><span className={mode === 'rail' ? 'lg:sr-only' : ''}>Sign out</span></button>
           </div>
         </div>
+        {mode === 'expanded' && <button ref={collapseButton} type="button"
+          aria-label="Collapse navigation" title="Collapse navigation"
+          className="mx-4 mb-4 hidden self-end rounded p-1 text-studio-ivory hover:bg-stone-700 lg:block"
+          onClick={() => changeMode('focus')}><StudioIcon name="left" /></button>}
       </aside>
-      <main id="workspace" tabIndex={-1} className={`mx-auto w-full max-w-7xl min-w-0 px-4 py-7 sm:px-8 lg:py-10 ${mode === 'focus' ? 'lg:pt-16' : ''}`}>
+      <main id="workspace" tabIndex={-1} className={`mx-auto w-full max-w-7xl min-w-0 px-4 py-7 sm:px-8 relative lg:py-10`}>
+        {mode !== 'expanded' && <button ref={restoreButton} type="button" aria-label="Expand navigation" title="Expand navigation"
+          className="absolute left-1 top-2 hidden rounded p-1 text-studio-muted hover:bg-studio-linen lg:block"
+          onClick={() => changeMode('expanded')}><StudioIcon name="right" /></button>}
         <Outlet />
       </main>
     </div>

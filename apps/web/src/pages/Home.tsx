@@ -1,3 +1,4 @@
+import { stageDocuments } from '../advisor/document-handoff';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { APPROVAL_EVENT_LABELS, POST_STATUS_LABELS, type ActivityEntry, type CalendarResponse, type NotificationsResponse, type PostSummary } from '@the-pocket/shared';
@@ -100,10 +101,10 @@ export function Home() {
         <h1 className="text-4xl font-semibold text-studio-ink sm:text-5xl">Hi, {me.name?.trim().split(/\s+/)[0] || 'there'}!</h1>
         {can('assistant.use') && <Composer home value={question} onChange={setQuestion}
           attachmentTools={__MOCK_AUTH__ && can('content.draft')}
-          onSend={(text, photo) => {
+          onSend={(text, photo, documents) => {
             if (sent.current) return;
             sent.current = true;
-            navigate('/assistant', { state: { question: text, assetId: photo?.id } });
+            navigate('/assistant', { state: { question: text, assetId: photo?.id, documentKey: stageDocuments(documents) } });
           }} />}
         <div className="flex flex-wrap gap-2">
           {([

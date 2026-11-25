@@ -52,7 +52,7 @@ function AssetTile({ asset, active, open }: { asset: VisualAsset; active: boolea
 
 type Upload = { id: string; blob: Blob; label: string; parentId?: string; edits?: VisualRecipe };
 
-export function VisualWorkspace({ advisor = false, initialAssetId, initialPrompt, showAlbums }: { advisor?: boolean; initialAssetId?: string; initialPrompt?: string; showAlbums?: boolean }) {
+export function VisualWorkspace({ advisor = false, initialAssetId, initialPrompt, showAlbums, conversationId }: { advisor?: boolean; initialAssetId?: string; initialPrompt?: string; showAlbums?: boolean; conversationId?: string }) {
   const { me, apiFetch } = useAuth();
   const [assets, setAssets] = useState<VisualAsset[]>();
   const autoEditSent = useRef(false);
@@ -185,6 +185,7 @@ export function VisualWorkspace({ advisor = false, initialAssetId, initialPrompt
       {selected && <Card title={selected.label}>
         <SelectedPhoto key={`${selected.id}:${reviewPreview?.assetId === selected.id ? reviewPreview.id : ''}`} asset={selected} assets={assets ?? []} onSource={openPhoto}
           suggested={reviewPreview?.assetId === selected.id ? reviewPreview.recipe : undefined} initialPrompt={!autoEditSent.current && selected.id === initialAssetId ? initialPrompt : undefined}
+          conversationId={conversationId}
           onAutoEdit={() => { autoEditSent.current = true; }}
           save={(blob, edits, parentId) => upload({ id: crypto.randomUUID(), blob, label: `${selected.label.slice(0, 84)} — edited`, parentId, edits })} />
       </Card>}
@@ -245,8 +246,8 @@ export function VisualWorkspace({ advisor = false, initialAssetId, initialPrompt
   );
 }
 
-function SelectedPhoto({ asset, assets, onSource, save, initialPrompt, onAutoEdit, suggested }: {
-  suggested?: VisualRecipe; initialPrompt?: string; onAutoEdit: () => void; asset: VisualAsset; assets: VisualAsset[]; onSource: (id: string) => void;
+function SelectedPhoto({ asset, assets, onSource, save, initialPrompt, onAutoEdit, suggested, conversationId }: {
+  suggested?: VisualRecipe; initialPrompt?: string; onAutoEdit: () => void; conversationId?: string; asset: VisualAsset; assets: VisualAsset[]; onSource: (id: string) => void;
   save: (blob: Blob, edits: VisualRecipe, parentId: string) => Promise<void>;
 }) {
   // Older derivatives may describe an edit of an already-rendered derivative.
@@ -284,7 +285,7 @@ function SelectedPhoto({ asset, assets, onSource, save, initialPrompt, onAutoEdi
 
   return <div id="photo-editor" className="space-y-4">
     {source && <button className="text-sm font-semibold underline underline-offset-4" type="button" onClick={() => onSource(source.id)}>Open source: {source.label}</button>}
-    {url ? <PhotoEditor url={url} save={(replaySource ?? asset).owned === false ? undefined : save} assetId={replaySource ? replaySource.id : asset.id} initialRecipe={suggested ?? (replaySource ? asset.edits ?? undefined : undefined)} initialPrompt={initialPrompt} onAutoEdit={onAutoEdit} adviceAssetId={asset.id} /> : <p role="status">{url === null ? 'Photo unavailable.' : 'Loading image…'}</p>}
+    {url ? <PhotoEditor url={url} save={(replaySource ?? asset).owned === false ? undefined : save} assetId={replaySource ? replaySource.id : asset.id} initialRecipe={suggested ?? (replaySource ? asset.edits ?? undefined : undefined)} initialPrompt={initialPrompt} onAutoEdit={onAutoEdit} adviceAssetId={asset.id} conversationId={conversationId} /> : <p role="status">{url === null ? 'Photo unavailable.' : 'Loading image…'}</p>}
     {__MOCK_AUTH__ && url && <div className="flex flex-wrap items-end gap-2 border-t border-studio-linen pt-3">
       {!posts ? <button type="button" className={secondaryButtonClass} onClick={() => void loadPosts()}>Choose a draft to attach this version</button>
         : posts.length ? <>
@@ -309,7 +310,7 @@ export function VisualStudio() {
       <h1 className="text-4xl font-semibold">Visual Studio</h1>
       <p className="mt-1 text-sm text-studio-muted">Prepare photographs, compare adjustments, and save edited versions.</p>
     </header>
-    <VisualWorkspace initialAssetId={params.get('asset') ?? undefined} showAlbums={params.get('albums') === '1'} />
+    <VisualWorkspace initialAssetId={params.get('asset') ?? undefined} conversationId={params.get('conversation') ?? undefined} showAlbums={params.get('albums') === '1'} />
     <VisualStandards />
   </div>;
 }

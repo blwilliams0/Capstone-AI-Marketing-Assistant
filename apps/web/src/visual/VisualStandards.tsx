@@ -72,6 +72,17 @@ export function VisualStandards({ propose = false }: { propose?: boolean }) {
     } finally { setBusy(false); }
   }
 
+  async function setImagePermission(item: VisualStandard, allowed: boolean) {
+    setBusy(true);
+    setError('');
+    try {
+      const response = await apiFetch(`/api/visual/standards/${item.versionId}/image-permission`, { method: 'POST', body: { allowed } });
+      if (!response.ok) throw new Error(await readError(response));
+      await load();
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setBusy(false); }
+  }
+
   if (!canRead) return null;
   return <Card title="Visual Standards">
     {error && <Alert kind="error">{error}</Alert>}
@@ -84,6 +95,12 @@ export function VisualStandards({ propose = false }: { propose?: boolean }) {
         <p className="text-sm">{item.rationale}</p>
         {item.assetId && <Link className="text-sm underline" to={`/visual?asset=${item.assetId}`}>Open reference image</Link>}
         {canPropose && (item.kind === 'reference' || admin) && <div className="flex flex-wrap gap-2 pt-1">
+          {item.status === 'approved' && item.classification === 'on_brand' && assets.some((asset) => asset.id === item.assetId && asset.owned !== false) &&
+            <button type="button" className={secondaryButtonClass} disabled={busy} onClick={() => {
+              if (item.liveImageAllowed || window.confirm('Confirm that you have permission to share this exact photo with the configured AI provider and it contains no identifiable people or private information.')) {
+                void setImagePermission(item, !item.liveImageAllowed);
+              }
+            }}>{item.liveImageAllowed ? 'Revoke reference AI permission' : 'Allow reference in live AI evaluation'}</button>}
           <button className={secondaryButtonClass} onClick={() => revise(item)}>Propose revision</button>
           {admin && item.status === 'proposed' && <>
             <button className={buttonClass} disabled={busy} onClick={() => {

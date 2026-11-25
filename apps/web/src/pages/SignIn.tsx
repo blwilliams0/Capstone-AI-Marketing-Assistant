@@ -31,7 +31,7 @@ export function SignIn() {
       <AuthShell>
         <div className="rounded-lg border border-studio-linen bg-studio-cream p-4">
           <h2 className="mb-2 font-serif text-2xl font-semibold">Practice workspace</h2>
-          <p className="mb-4 text-sm">Choose a role. Practice data stays on this computer and AI replies are simulated.</p>
+          <p className="mb-4 text-sm">Choose a local practice role. Use fictional test data.</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {ROLES.map((r: Role) => (
               <button key={r} type="button" onClick={() => signInMock(r)} className="rounded-md border border-studio-taupe bg-studio-pearl p-3 text-left text-sm hover:bg-studio-ivory">

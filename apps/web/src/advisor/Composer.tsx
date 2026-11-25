@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { VisualAsset, VisualCollection } from '@the-pocket/shared';
+import { advisorDocumentSchema, type AdvisorDocument, type VisualAsset, type VisualCollection } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { secondaryButtonClass } from '../ui';
 
 export const iconPaths = {
+  left: 'm15 5-7 7 7 7', right: 'm9 5 7 7-7 7',
   plus: 'M12 5v14M5 12h14', photo: 'M3 4h18v16H3zM3 17l5-5 4 4 3-3 6 5M15 8h2',
   send: 'M12 19V5m-6 6 6-6 6 6', menu: 'M4 6h16M4 12h16M4 18h16',
   rail: 'M3 4h18v16H3zM9 4v16', focus: 'M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5',
@@ -33,7 +34,7 @@ export function ThinkingBowl({ label = 'AI Advisor is preparing a response' }: {
 const imageTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
 export function Composer({ value, onChange, onSend, home, attachmentTools, pending, disabled, autoFocus, children }: {
-  value: string; onChange: (value: string) => void; onSend: (value: string, photo?: VisualAsset) => void;
+  value: string; onChange: (value: string) => void; onSend: (value: string, photo?: VisualAsset, documents?: AdvisorDocument[]) => void;
   home?: boolean; attachmentTools?: boolean; pending?: boolean; disabled?: boolean; autoFocus?: boolean; children?: ReactNode;
 }) {
   const { apiFetch } = useAuth();
@@ -41,6 +42,10 @@ export function Composer({ value, onChange, onSend, home, attachmentTools, pendi
   const [photos, setPhotos] = useState<VisualAsset[]>([]);
   const [albums, setAlbums] = useState<VisualCollection[]>([]);
   const [album, setAlbum] = useState('');
+  const [documents, setDocuments] = useState<AdvisorDocument[]>([]);
+  const [documentConsent, setDocumentConsent] = useState(false);
+  const sentDocuments = useRef(false);
+  const documentInput = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<VisualAsset>();
   const [confirmed, setConfirmed] = useState(false);
   const [preview, setPreview] = useState('');
@@ -102,13 +107,46 @@ export function Composer({ value, onChange, onSend, home, attachmentTools, pendi
     finally { setLoading(false); }
   }
 
-  const blocked = disabled || pending || loading || value.trim().length < 3 || Boolean(photo && !confirmed);
+  async function readDocuments(files: File[]) {
+    if (!files.length || loading) return;
+    if (documents.length + files.length > 3) {
+      setError('Attach up to three documents per message.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      const extracted = await Promise.all(files.map(async (file) => {
+        if (file.size > 24000 || !/\.(txt|csv)$/i.test(file.name)) throw new Error('Choose a UTF-8 TXT or CSV file under 24 KB.');
+        const content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
+        const parsed = advisorDocumentSchema.safeParse({ name: file.name, content });
+        if (!parsed.success) throw new Error('Choose a plain-text document of up to 8,000 characters.');
+        return parsed.data;
+      }));
+      setDocuments((existing) => [...existing, ...extracted]);
+      setDocumentConsent(false);
+      setPicker(undefined);
+      textarea.current?.focus();
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setLoading(false); }
+  }
+
+  const blocked = disabled || pending || loading || value.trim().length < 3 || Boolean(photo && !confirmed) || (documents.length > 0 && (!documentConsent || Boolean(photo)));
   const activeAlbum = albums.find((entry) => entry.id === album);
   const send = () => {
     if (blocked) return;
-    onSend(value.trim(), photo);
+    sentDocuments.current = documents.length > 0;
+    onSend(value.trim(), photo, documents.length ? documents : undefined);
     if (photo) attach();
   };
+  useEffect(() => {
+    if (!value && !pending && sentDocuments.current) {
+      sentDocuments.current = false;
+      setDocuments([]);
+      setDocumentConsent(false);
+    }
+  }, [value, pending]);
+
   const tool = 'grid size-9 place-items-center rounded-full text-studio-muted hover:bg-studio-linen disabled:opacity-50';
   return <form className="relative rounded-[20px] border border-studio-ivory bg-studio-pearl p-3 sm:p-4"
     onSubmit={(event) => { event.preventDefault(); send(); }}
@@ -132,13 +170,23 @@ export function Composer({ value, onChange, onSend, home, attachmentTools, pendi
       <button type="button" className="underline" onClick={() => attach()}>Remove photo</button>
       <label className="flex w-full items-start gap-2"><input className="mt-0.5 size-4 shrink-0" type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> I have permission to use this photo and it contains no identifiable private information.</label>
     </div>}
+    {documents.length > 0 && <div className="my-2 space-y-2 text-sm">
+      <ul className="flex flex-wrap gap-2">{documents.map((file, index) => <li key={index} className="flex items-center gap-2 rounded-full border border-studio-ivory px-3 py-1">
+        <StudioIcon name="file" /><span className="break-all">{file.name}</span>
+        <button type="button" className="underline" aria-label={`Remove ${file.name}`} onClick={() => setDocuments((prior) => prior.filter((_, i) => i !== index))}>Remove</button>
+      </li>)}</ul>
+      <label className="flex items-start gap-2"><input type="checkbox" checked={documentConsent} onChange={(event) => setDocumentConsent(event.target.checked)} /> I may use these files and they contain no private guest or employee information.</label>
+      {photo && <p>Send documents and photo edits in separate messages.</p>}
+    </div>}
     {error && <p role="alert" className="my-2 text-sm text-studio-ink">{error}</p>}
     {loading && <p role="status" className="sr-only">Preparing photo selection</p>}
     <div className="relative mt-2 flex items-center gap-1">
+      <input ref={documentInput} type="file" hidden multiple accept=".txt,.csv,text/plain,text/csv"
+        onChange={(event) => { void readDocuments(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
+      <button type="button" className={tool} aria-label="Add to prompt" title="Add to prompt" aria-expanded={picker === 'actions'} disabled={pending || loading}
+        onClick={(event) => { launchButton.current = event.currentTarget; setPicker(picker === 'actions' ? undefined : 'actions'); }}><StudioIcon name="plus" /></button>
       {attachmentTools && <>
         <input ref={fileInput} type="file" hidden accept={imageTypes.join(',')} onChange={(event) => { void upload(event.target.files?.[0]); event.target.value = ''; }} />
-        <button type="button" className={tool} aria-label="Add to prompt" title="Add to prompt" aria-expanded={picker === 'actions'} disabled={pending || loading}
-          onClick={(event) => { launchButton.current = event.currentTarget; setPicker(picker === 'actions' ? undefined : 'actions'); }}><StudioIcon name="plus" /></button>
         <button type="button" className={tool} aria-label="Attach a photo" title="Attach a photo" aria-expanded={picker === 'photos'} disabled={pending || loading}
           onClick={(event) => { launchButton.current = event.currentTarget; if (picker === 'photos') setPicker(undefined); else void choosePhotos(); }}><StudioIcon name="photo" /></button>
       </>}
@@ -148,8 +196,10 @@ export function Composer({ value, onChange, onSend, home, attachmentTools, pendi
         className="grid size-10 place-items-center rounded-full bg-studio-slate text-studio-pearl hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50"><StudioIcon name="send" /></button>}
     </div>
     {picker && <div className="mt-2 space-y-2 rounded-xl border border-studio-ivory p-3 text-sm">
-      <button type="button" className={secondaryButtonClass} disabled={loading} onClick={() => fileInput.current?.click()}>Upload photo</button>
-      {picker === 'actions' ? <button type="button" className={`${secondaryButtonClass} ml-2`} disabled={loading} onClick={() => void choosePhotos()}>Choose from Media Library</button> :
+      {picker === 'actions' && <button type="button" className={secondaryButtonClass} disabled={loading}
+        onClick={() => documentInput.current?.click()}>Upload files (TXT or CSV)</button>}
+      {attachmentTools && <button type="button" className={secondaryButtonClass} disabled={loading} onClick={() => fileInput.current?.click()}>Upload photo</button>}
+      {picker === 'actions' ? attachmentTools && <button type="button" className={`${secondaryButtonClass} ml-2`} disabled={loading} onClick={() => void choosePhotos()}>Choose from Media Library</button> :
         <>
           <label className="block">Album <select className="ml-2 max-w-full rounded border border-studio-ivory p-1" value={album} onChange={(event) => setAlbum(event.target.value)}>
             <option value="">All accessible photos</option>

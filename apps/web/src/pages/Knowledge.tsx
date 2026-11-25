@@ -37,6 +37,7 @@ export function Knowledge() {
   const [notice, setNotice] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [learningIds, setLearningIds] = useState<string[]>([]);
+  const [learningPatterns, setLearningPatterns] = useState<{ topic: string; submissions: number }[]>([]);
   const [onlyLearnings, setOnlyLearnings] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -49,7 +50,8 @@ export function Knowledge() {
     else setError(await readError(a));
     if (b.ok) setCore((await b.json()) as BrandCore);
     if (canApprove) {
-      const learning = await apiFetch('/api/assistant/learnings');
+      const [learning, patterns] = await Promise.all([apiFetch('/api/assistant/learnings'), apiFetch('/api/assistant/learning-patterns')]);
+      if (patterns.ok) setLearningPatterns((await patterns.json()).patterns);
       if (learning.ok) setLearningIds(((await learning.json()) as { itemIds: string[] }).itemIds);
       else setError(await readError(learning));
     }
@@ -108,6 +110,11 @@ export function Knowledge() {
         {onlyLearnings ? 'Show all brand rules' : 'Review staff learning proposals'}
       </button>}
 
+      {onlyLearnings && <Card title="Repeated staff proposals">
+        <p className="text-sm text-studio-muted">Counts explicitly shared proposals with the same title in the last 90 days.</p>
+        {learningPatterns.length ? <ul className="mt-2 list-disc pl-5 text-sm">{learningPatterns.map((entry) =>
+          <li key={entry.topic}>{entry.topic} · {entry.submissions} submissions</li>)}</ul> : <p className="mt-2 text-sm">No repeated titles yet.</p>}
+      </Card>}
       {adding && (
         <AddForm
           initialKind={kind}

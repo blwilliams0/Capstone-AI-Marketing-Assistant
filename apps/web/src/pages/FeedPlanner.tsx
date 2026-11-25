@@ -1,6 +1,7 @@
+import { PracticeInstagram } from '../visual/PracticeInstagram';
 import { Link } from 'react-router';
 import { useEffect, useRef, useState } from 'react';
-import type { FeedReviewResult, PostDetail, PostSummary, VisualAsset, VisualCollection } from '@the-pocket/shared';
+import type { SavedFeedEvaluation, PostDetail, PostSummary, VisualAsset, VisualCollection } from '@the-pocket/shared';
 import { ThinkingBowl } from '../advisor/Composer';
 import { readError, useAuth } from '../auth';
 import { CollectionVisibility } from '../visual/AlbumManager';
@@ -65,7 +66,8 @@ function Planner({ storageKey }: { storageKey: string }) {
   const [includePublished, setIncludePublished] = useState(true);
   const [preview, setPreview] = useState<Tile>();
   const dialog = useRef<HTMLDialogElement>(null);
-  const [review, setReview] = useState<{ snapshot: string; data: FeedReviewResult }>();
+  const [review, setReview] = useState<SavedFeedEvaluation>();
+  const [evaluations, setEvaluations] = useState<SavedFeedEvaluation[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   useEffect(() => {
@@ -186,7 +188,21 @@ function Planner({ storageKey }: { storageKey: string }) {
   const editable = !layout || layout.editable;
 
   const reviewPhotos = planned.slice(0, 9).map((photo) => ({ assetId: photo.id, existingFeed: existingIds.includes(photo.id) }));
-  const snapshot = JSON.stringify(reviewPhotos);
+  const matches = (evaluation: SavedFeedEvaluation) => evaluation.layoutId === (layout?.id ?? null)
+    && evaluation.layoutRevision === (layout?.revision ?? null)
+    && evaluation.photos.length === reviewPhotos.length
+    && evaluation.photos.every((item, index) => item.assetId === reviewPhotos[index]?.assetId && item.existingFeed === reviewPhotos[index]?.existingFeed);
+  useEffect(() => {
+    if (!__MOCK_AUTH__ || !me?.capabilities.includes('assistant.use')) return;
+    let active = true;
+    void apiFetch('/api/visual/feed-reviews').then(async (response) => {
+      if (response.ok) {
+        const { evaluations } = await response.json() as { evaluations: SavedFeedEvaluation[] };
+        if (active) setEvaluations(evaluations);
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [apiFetch, me]);
 
   async function reviewFeed() {
     if (reviewing || !privacy || reviewPhotos.length < 2) return;
@@ -194,9 +210,11 @@ function Planner({ storageKey }: { storageKey: string }) {
     setReview(undefined);
     setError('');
     try {
-      const response = await apiFetch('/api/visual/feed-review', { method: 'POST', body: { photos: reviewPhotos, privacyConfirmed: privacy } });
+      const response = await apiFetch('/api/visual/feed-review', { method: 'POST', body: { photos: reviewPhotos, privacyConfirmed: privacy, layout: layout ? { id: layout.id, revision: layout.revision } : undefined } });
       if (!response.ok) throw new Error(await readError(response));
-      setReview({ snapshot, data: await response.json() as FeedReviewResult });
+      const { evaluation } = await response.json() as { evaluation: SavedFeedEvaluation };
+      setEvaluations((prior) => [evaluation, ...prior].slice(0, 25));
+      setReview(evaluation);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not review this grid.');
     } finally { setReviewing(false); }
@@ -205,11 +223,12 @@ function Planner({ storageKey }: { storageKey: string }) {
   return <div className="space-y-5">
     <header>
       <h1 className="text-4xl font-semibold">Feed Preview</h1>
-      <p className="mt-1 text-sm text-studio-muted">Arrange an Instagram grid alongside photos manually recorded as posted. Save a named layout to revisit it on another device. Feed Preview does not connect to Instagram.</p>
+      <p className="mt-1 text-sm text-studio-muted">Arrange an Instagram grid alongside photos manually recorded as posted. Save a named layout to revisit it on another device.</p>
     </header>
     {error && <Alert kind="error">{error}</Alert>}
     {storageError && <Alert kind="info">{storageError}</Alert>}
     {notice && <Alert kind="success">{notice}</Alert>}
+    {__MOCK_AUTH__ && <PracticeInstagram />}
     <Card title="Saved layouts">
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm font-semibold">Open layout
@@ -247,16 +266,24 @@ function Planner({ storageKey }: { storageKey: string }) {
         </label>
       </div>
     </Card>
-    {__MOCK_AUTH__ && me?.capabilities.includes('assistant.use') && reviewPhotos.length >= 2 && <Card title="Practice feed review">
+    {__MOCK_AUTH__ && me?.capabilities.includes('assistant.use') && <Card title="Practice feed review">
       <p className="text-sm text-studio-muted">Reviews the first nine library photos in grid order. Recorded posts are excluded.</p>
       <label className="my-2 flex gap-2 text-sm"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /> I have permission to use these photos and they contain no identifiable private information.</label>
       <div className="flex items-center gap-2">
-        <button className={buttonClass} disabled={!privacy || reviewing} onClick={() => void reviewFeed()}>Run practice feed review</button>
+        <button className={buttonClass} disabled={!privacy || reviewing || reviewPhotos.length < 2} onClick={() => void reviewFeed()}>Run practice feed review</button>
         {reviewing && <ThinkingBowl label="AI Advisor is preparing a practice feed review" />}
       </div>
-      {review?.snapshot === snapshot && <div className="mt-3 space-y-2 text-sm" role="status">
-        <ul className="list-disc pl-5">{[...review.data.observations, ...review.data.suggestions].map((line, index) => <li key={index}>{line}</li>)}</ul>
-        <p>{review.data.uncertainty}</p>
+      {evaluations.length > 0 && <label className="my-2 block text-sm">Review history
+        <select className={inputClass} value={review?.id ?? ''} onChange={(event) => setReview(evaluations.find((item) => item.id === event.target.value))}>
+          <option value="">Choose an evaluation</option>
+          {evaluations.map((item) => <option key={item.id} value={item.id}>{new Date(item.createdAt).toLocaleString()} · {item.photos.length} photos</option>)}
+        </select>
+      </label>}
+      {review && <div className="mt-3 space-y-2 text-sm" role="status">
+        {!matches(review) && <p className="font-semibold">This evaluation describes an earlier arrangement.</p>}
+        <ul className="list-disc pl-5">{[...review.result.observations, ...review.result.suggestions].map((line, index) => <li key={index}>{line}</li>)}</ul>
+        <p>{review.result.uncertainty}</p>
+        <Link className="inline-block underline" to="/assistant" state={{ question: 'Help me turn this feed review into practical next steps.', feedEvaluationId: review.id }}>Discuss this evaluation in Advisor</Link>
       </div>}
     </Card>}
     <dialog ref={dialog} className="m-auto w-[min(90vw,48rem)] rounded-lg border border-studio-ivory bg-studio-pearl p-4 backdrop:bg-studio-ink/60" aria-label={preview?.label ?? 'Feed photograph preview'} onClose={() => setPreview(undefined)}>

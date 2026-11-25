@@ -10,13 +10,14 @@ const controls = [
   ['highlights', 'Highlights'], ['shadows', 'Shadows'], ['sharpness', 'Sharpness'],
 ] as const;
 
-export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt, onAutoEdit, adviceAssetId }: {
+export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt, onAutoEdit, adviceAssetId, conversationId }: {
   url: string;
   assetId: string;
   initialRecipe?: VisualRecipe;
   initialPrompt?: string;
   onAutoEdit?: () => void;
   adviceAssetId?: string;
+  conversationId?: string;
   save?: (image: Blob, edits: VisualRecipe, assetId: string) => Promise<void>;
 }) {
   const { apiFetch, me } = useAuth();
@@ -101,7 +102,7 @@ export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt, 
     setAdvice(undefined);
     try {
       const response = await apiFetch('/api/visual/edit-advice', {
-        method: 'POST', body: { assetId: adviceAssetId ?? assetId, request: prompt, currentRecipe: recipe, privacyConfirmed: privacy, previousRequests },
+        method: 'POST', body: { assetId: adviceAssetId ?? assetId, request: prompt, currentRecipe: recipe, conversationId, privacyConfirmed: privacy, previousRequests },
       });
       if (!response.ok) throw new Error(await readError(response));
       setAdvice(await response.json() as VisualEditResult);
@@ -110,7 +111,7 @@ export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt, 
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not get practice editing advice.');
     } finally { setAsking(false); }
-  }, [apiFetch, assetId, adviceAssetId, prompt, recipe, privacy, previousRequests]);
+  }, [apiFetch, assetId, adviceAssetId, prompt, recipe, privacy, previousRequests, conversationId]);
 
   useEffect(() => {
     if (initialPrompt && !autoAsked.current) {
@@ -142,7 +143,7 @@ export function PhotoEditor({ url, save, assetId, initialRecipe, initialPrompt, 
             <textarea className={inputClass} value={prompt} maxLength={2000} placeholder="Make this a little warmer…" onChange={(event) => setPrompt(event.target.value)} />
           </label>
           <label className="flex gap-2 text-sm"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /> I have permission to use this image and it contains no identifiable private information.</label>
-          <button className={buttonClass} disabled={asking || !privacy || prompt.trim().length < 3}>Suggest practice adjustments</button>{asking && <ThinkingBowl label="AI Advisor is preparing photo advice" />}
+          <button className={buttonClass} disabled={asking || !privacy || prompt.trim().length < 3}>Suggest adjustments</button>{asking && <ThinkingBowl label="AI Advisor is preparing photo advice" />}
           {advice && <div role="status" className="space-y-2 text-sm">
             <p>{advice.rationale}</p>
             <button type="button" className={secondaryButtonClass} onClick={() => { setRecipe(advice.recipe); setBefore(false); setPreset(''); setAdvice(undefined); }}>Preview suggested adjustments</button>

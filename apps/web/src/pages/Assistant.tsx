@@ -1,8 +1,9 @@
+import { takeDocuments } from '../advisor/document-handoff';
 import { Composer } from '../advisor/Composer';
 import { AdvisorFeedback, AdvisorPreferences } from '../visual/AdvisorMemory';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KNOWLEDGE_KIND_LABELS, type AskResponse, type AssistantStatus, type KnowledgeKind, type SourceRef } from '@the-pocket/shared';
+import { KNOWLEDGE_KIND_LABELS, type AskResponse, type AdvisorDocument, type AssistantStatus, type KnowledgeKind, type SourceRef } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, secondaryButtonClass } from '../ui';
 import { VisualWorkspace } from './VisualStudio';
@@ -32,13 +33,17 @@ const kindName = (k: string) => KNOWLEDGE_KIND_LABELS[k as KnowledgeKind]?.name 
 export function Assistant() {
   const location = useLocation();
   const navigate = useNavigate();
-  const handoff = location.state as { question?: string; assetId?: string } | null;
+  const handoff = location.state as { question?: string; assetId?: string; documentKey?: string; feedEvaluationId?: string } | null;
+  const params = new URLSearchParams(location.search);
+  const selectedMode = params.get('mode');
+  const mode = selectedMode === 'strategy' || selectedMode === 'brand_consistency' ? selectedMode : undefined;
   const { apiFetch, me } = useAuth();
   const canDraft = me?.capabilities.includes('content.draft') ?? false;
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [question, setQuestion] = useState('');
+  const [handoffDocuments, setHandoffDocuments] = useState<AdvisorDocument[]>();
   const [photoTask, setPhotoTask] = useState<{ assetId: string; question: string; key: string }>();
   const request = useRef<AbortController | null>(null);
   const consumed = useRef<string | undefined>(undefined);
@@ -61,7 +66,7 @@ export function Assistant() {
       })
       .catch(() => setError('Could not check whether the advisor is available.'));
     void loadHistory().catch(() => setError('Could not load conversation history.'));
-  }, [apiFetch, loadHistory]);
+  }, [apiFetch, loadHistory, mode]);
 
   async function openConversation(id: string) {
     if (busy || opening) return;
@@ -84,7 +89,7 @@ export function Assistant() {
     }
   }
 
-  const submit = useCallback(async (text: string, id?: string) => {
+  const submit = useCallback(async (text: string, id?: string, documents?: AdvisorDocument[], feedEvaluationId?: string) => {
     if (request.current || text.trim().length < 3) return;
     const controller = new AbortController();
     request.current = controller;
@@ -93,7 +98,7 @@ export function Assistant() {
     setError(null);
     try {
       const res = await apiFetch('/api/assistant/ask', {
-        method: 'POST', body: { question: text, conversationId: id }, signal: controller.signal,
+        method: 'POST', body: { question: text, conversationId: id, feedEvaluationId, documents, documentPrivacyConfirmed: documents?.length ? true : undefined, mode }, signal: controller.signal,
       });
       if (controller.signal.aborted) return;
       if (!res.ok) return setError(await readError(res));
@@ -101,6 +106,7 @@ export function Assistant() {
       if (controller.signal.aborted) return;
       setTurns((previous) => [...previous, { question: text, answer: out.answer, sources: out.sources, consulted: out.consulted }]);
       setConversationId(out.conversationId);
+      if (documents?.length) setHandoffDocuments(undefined);
       setQuestion((current) => current === text ? '' : current);
       if (!id) void loadHistory().catch(() => setError('The reply was saved, but the history could not refresh.'));
     } catch {
@@ -111,7 +117,7 @@ export function Assistant() {
         setBusy(false);
       }
     }
-  }, [apiFetch, loadHistory]);
+  }, [apiFetch, loadHistory, mode]);
 
   useEffect(() => () => request.current?.abort(), []);
 
@@ -119,27 +125,37 @@ export function Assistant() {
     if (!handoff?.question || consumed.current === location.key) return;
     if (!handoff.assetId && !status) return;
     consumed.current = location.key;
+    const files = takeDocuments(handoff.documentKey);
+    if (files) setHandoffDocuments(files);
     if (handoff.assetId && __MOCK_AUTH__ && canDraft) {
       setPhotoTask({ assetId: handoff.assetId, question: handoff.question, key: location.key });
     } else if (status?.available) {
-      void submit(handoff.question);
+      void submit(handoff.question, undefined, files, handoff.feedEvaluationId);
     } else {
       setQuestion(handoff.question);
     }
-    navigate(location.pathname, { replace: true, state: null });
-  }, [handoff, status, location.key, location.pathname, navigate, submit, canDraft]);
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [handoff, status, location.key, location.pathname, location.search, navigate, submit, canDraft]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem]">
       <div className="space-y-4">
         <div>
-          <h1 className="text-2xl font-semibold">AI Advisor</h1>
+          <h1 className="text-2xl font-semibold">{mode === 'brand_consistency' ? 'Brand consistency review' : mode === 'strategy' ? 'Marketing strategy' : 'AI Advisor'}</h1>
           <p className="text-sm text-stone-600">
             Answers use The Pocket's approved brand rules, facts and strategy. Always check anything marked "Please confirm" before acting.
           </p>
         </div>
+        <nav aria-label="Advisor tasks" className="flex flex-wrap gap-2 text-sm">
+          <Link to="/assistant" className={secondaryButtonClass}>Conversation</Link>
+          <Link to="/assistant?mode=brand_consistency" className={secondaryButtonClass}>Review brand consistency</Link>
+          <Link to="/assistant?mode=strategy" className={secondaryButtonClass}>Explore marketing strategy</Link>
+        </nav>
         {status?.provider === 'mock' && (
           <Alert kind="info">Practice mode: no AI service is connected, so answers are placeholders. Nothing is sent anywhere.</Alert>
+        )}
+        {__MOCK_AUTH__ && status?.provider === 'anthropic' && (
+          <Alert kind="info">Live Claude evaluation is active. Use fictional material. Requests can incur charges.</Alert>
         )}
         {status && !status.available && <Alert kind="error">The assistant is not set up yet. An administrator needs to add the AI service key.</Alert>}
 
@@ -205,13 +221,17 @@ export function Assistant() {
         ))}
 
         {error && <Alert kind="error">{error}</Alert>}
+        {!busy && handoffDocuments?.length && <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span>Ready to retry with {handoffDocuments.map((file) => file.name).join(', ')}.</span>
+          <button type="button" className="underline" onClick={() => setHandoffDocuments(undefined)}>Remove pending documents</button>
+        </div>}
         <Composer value={question} onChange={setQuestion} pending={busy} autoFocus
           attachmentTools={__MOCK_AUTH__ && canDraft} disabled={opening || !status?.available}
-          onSend={(text, photo) => {
+          onSend={(text, photo, documents) => {
             if (photo) {
               setPhotoTask({ assetId: photo.id, question: text, key: crypto.randomUUID() });
               setQuestion('');
-            } else void submit(text, conversationId);
+            } else void submit(text, conversationId, documents ?? handoffDocuments);
           }}>
           {busy && <button type="button" className="text-sm underline" onClick={() => request.current?.abort()}>Cancel response display</button>}
         </Composer>
@@ -221,12 +241,13 @@ export function Assistant() {
           setTurns([]);
           setConversationId(undefined);
           setPhotoTask(undefined);
+          setHandoffDocuments(undefined);
         }}>New conversation</button>}
       </div>
 
       {__MOCK_AUTH__ && canDraft && <details key={photoTask?.key} open={photoTask ? true : undefined} className="order-last rounded-lg border border-studio-linen bg-studio-pearl p-4 xl:col-span-2">
         <summary className="cursor-pointer font-semibold">Photos in AI Advisor</summary>
-        <div className="mt-4"><VisualWorkspace advisor initialAssetId={photoTask?.assetId} initialPrompt={photoTask?.question} /></div>
+        <div className="mt-4"><VisualWorkspace advisor conversationId={conversationId} initialAssetId={photoTask?.assetId} initialPrompt={photoTask?.question} /></div>
       </details>}
       <aside className="self-start space-y-2 rounded-xl border border-stone-200 bg-white p-4">
         <AdvisorPreferences />
