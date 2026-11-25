@@ -1,12 +1,15 @@
+import { AdvisorFeedback } from '../visual/AdvisorMemory';
+import { VisualStandards } from '../visual/VisualStandards';
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import type { PostSummary, VisualAsset, VisualRecipe, VisualReviewResult } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
 import { Alert, buttonClass, Card, inputClass, secondaryButtonClass } from '../ui';
+import { AlbumManager } from '../visual/AlbumManager';
 import { PhotoEditor } from '../visual/PhotoEditor';
 
 const accepted = ['image/jpeg', 'image/png', 'image/webp'];
-const sections: [keyof VisualReviewResult, string][] = [
+const sections: [Exclude<keyof VisualReviewResult, 'suggestedRecipe'>, string][] = [
   ['observations', 'Observations'], ['brandConsiderations', 'Brand considerations'],
   ['recommendations', 'Recommendations'], ['verify', 'Check before using'],
 ];
@@ -49,13 +52,18 @@ function AssetTile({ asset, active, open }: { asset: VisualAsset; active: boolea
 
 type Upload = { id: string; blob: Blob; label: string; parentId?: string; edits?: VisualRecipe };
 
-export function VisualWorkspace({ advisor = false }: { advisor?: boolean }) {
+export function VisualWorkspace({ advisor = false, initialAssetId, initialPrompt }: { advisor?: boolean; initialAssetId?: string; initialPrompt?: string }) {
   const { me, apiFetch } = useAuth();
   const [assets, setAssets] = useState<VisualAsset[]>();
-  const [active, setActive] = useState<string>();
+  const [active, setActive] = useState<string | undefined>(initialAssetId);
+  const [albumIds, setAlbumIds] = useState<string[] | null>(null);
   const [reviewIds, setReviewIds] = useState<string[]>([]);
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
   const [review, setReview] = useState<VisualReviewResult>();
+  const [reviewId, setReviewId] = useState<string>();
+  const [reviewAssetId, setReviewAssetId] = useState<string>();
+  const [reviewHistory, setReviewHistory] = useState<{ id: string; result: VisualReviewResult; createdAt: string; assetCount: number }[]>([]);
+  const [reviewPreview, setReviewPreview] = useState<{ assetId: string; recipe: VisualRecipe; id: string }>();
   const [query, setQuery] = useState('');
   const [view, setView] = useState('all');
   const [error, setError] = useState('');
@@ -131,13 +139,30 @@ export function VisualWorkspace({ advisor = false }: { advisor?: boolean }) {
     try {
       const response = await apiFetch('/api/visual/review', { method: 'POST', body: { ids: reviewIds, privacyConfirmed } });
       if (!response.ok) return setError(await readError(response));
-      setReview(((await response.json()) as { review: VisualReviewResult }).review);
+      const result = await response.json() as { reviewId: string; review: VisualReviewResult };
+      setReview(result.review);
+      setReviewId(result.reviewId);
+      setReviewAssetId(reviewIds.length === 1 ? reviewIds[0] : undefined);
     } catch { setError('Could not read the photo review.'); }
     finally { setBusy(false); }
   }
 
+  async function loadReviewHistory() {
+    if (!active) return;
+    try {
+      const response = await apiFetch(`/api/visual/reviews?assetId=${active}`);
+      if (!response.ok) return setError(await readError(response));
+      setReviewHistory((await response.json()).reviews);
+    } catch { setError('Could not load saved photo reviews.'); }
+  }
+
+  function openPhoto(id: string) {
+    setActive(id);
+    setReviewHistory([]);
+  }
+
   if (!canUse) return <Alert kind="info">Your role does not have access to private photo tools.</Alert>;
-  const shown = (assets ?? []).filter((item) => item.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+  const shown = (assets ?? []).filter((item) => (!albumIds || albumIds.includes(item.id)) && item.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
     && (view === 'all' || (view === 'edited') === Boolean(item.parentId)));
 
   return (
@@ -156,11 +181,13 @@ export function VisualWorkspace({ advisor = false }: { advisor?: boolean }) {
             onChange={(event) => { receive(event.target.files?.[0]); event.target.value = ''; }} />
         </label>
       </div>
-      {!advisor && selected && <Card title={selected.label}>
-        <SelectedPhoto key={selected.id} asset={selected} assets={assets ?? []} onSource={setActive}
-          save={(blob, edits) => upload({ id: crypto.randomUUID(), blob, label: `${selected.label.slice(0, 84)} — edited`, parentId: selected.id, edits })} />
+      {selected && <Card title={selected.label}>
+        <SelectedPhoto key={`${selected.id}:${reviewPreview?.assetId === selected.id ? reviewPreview.id : ''}`} asset={selected} assets={assets ?? []} onSource={openPhoto}
+          suggested={reviewPreview?.assetId === selected.id ? reviewPreview.recipe : undefined} initialPrompt={initialPrompt}
+          save={(blob, edits, parentId) => upload({ id: crypto.randomUUID(), blob, label: `${selected.label.slice(0, 84)} — edited`, parentId, edits })} />
       </Card>}
       <Card title={advisor ? 'Photos for this review' : 'Your photo library'}>
+        {!advisor && assets && <AlbumManager assets={assets} onFilter={setAlbumIds} />}
         <div className="mb-3 flex flex-wrap gap-2">
           <input className={`${inputClass} max-w-64`} type="search" aria-label="Search your photos" placeholder="Search your photos" value={query} onChange={(event) => setQuery(event.target.value)} />
           <select className={`${inputClass} max-w-40`} aria-label="Filter originals and edits" value={view} onChange={(event) => setView(event.target.value)}>
@@ -172,9 +199,9 @@ export function VisualWorkspace({ advisor = false }: { advisor?: boolean }) {
             : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {shown.map((asset) => (
                 <div key={asset.id} className="grid gap-2">
-                  <AssetTile asset={asset} active={advisor ? reviewIds.includes(asset.id) : active === asset.id}
-                    open={() => advisor ? toggleReview(asset.id) : setActive(asset.id)} />
-                  {!advisor && canReview && <label className="flex gap-2 text-sm">
+                  <AssetTile asset={asset} active={active === asset.id}
+                    open={() => openPhoto(asset.id)} />
+                  {canReview && asset.owned !== false && <label className="flex gap-2 text-sm">
                     <input type="checkbox" checked={reviewIds.includes(asset.id)} disabled={reviewIds.length === 3 && !reviewIds.includes(asset.id)}
                       onChange={() => toggleReview(asset.id)} /> Select for review
                   </label>}
@@ -193,8 +220,18 @@ export function VisualWorkspace({ advisor = false }: { advisor?: boolean }) {
           <button type="button" className={buttonClass} disabled={!privacyConfirmed || !reviewIds.length || busy} onClick={() => void assess()}>
             {reviewIds.length > 1 ? 'Run practice comparison' : 'Run practice review'}
           </button>
+          {active && <button type="button" className={secondaryButtonClass} onClick={() => void loadReviewHistory()}>Load selected photo’s saved reviews</button>}
+          {reviewHistory.map((record) => <button key={record.id} type="button" className={secondaryButtonClass} onClick={() => {
+            setReview(record.result); setReviewId(record.id); setReviewAssetId(record.assetCount === 1 ? active : undefined);
+          }}>Review from {new Date(record.createdAt).toLocaleString()}</button>)}
           {review && <div className="space-y-4" aria-live="polite">
             <Alert kind="info">Simulated result. The practice provider makes no visual judgments.</Alert>
+            {reviewId && <AdvisorFeedback key={reviewId} reviewId={reviewId} />}
+            {reviewAssetId && review.suggestedRecipe && <button type="button" className={buttonClass} onClick={() => {
+              setReviewPreview({ assetId: reviewAssetId, recipe: review.suggestedRecipe!, id: crypto.randomUUID() });
+              openPhoto(reviewAssetId);
+              window.setTimeout(() => document.getElementById('photo-editor')?.scrollIntoView({ block: 'start' }), 0);
+            }}>Preview suggested recipe in editor</button>}
             {sections.map(([key, title]) => <section key={key}>
               <h3 className="font-semibold">{title}</h3>
               <ul className="list-disc pl-5 text-sm">{review[key].map((item, index) => <li key={index}>{item}</li>)}</ul>
@@ -206,11 +243,14 @@ export function VisualWorkspace({ advisor = false }: { advisor?: boolean }) {
   );
 }
 
-function SelectedPhoto({ asset, assets, onSource, save }: {
-  asset: VisualAsset; assets: VisualAsset[]; onSource: (id: string) => void;
-  save: (blob: Blob, edits: VisualRecipe) => Promise<void>;
+function SelectedPhoto({ asset, assets, onSource, save, initialPrompt, suggested }: {
+  suggested?: VisualRecipe; initialPrompt?: string; asset: VisualAsset; assets: VisualAsset[]; onSource: (id: string) => void;
+  save: (blob: Blob, edits: VisualRecipe, parentId: string) => Promise<void>;
 }) {
-  const url = usePrivateImage(asset.id);
+  // Older derivatives may describe an edit of an already-rendered derivative.
+  // Replay that recipe on its immediate input, preserving earlier edits.
+  const replaySource = !suggested && asset.edits ? assets.find((item) => item.id === asset.parentId) : undefined;
+  const url = usePrivateImage(replaySource ? replaySource.id : asset.id);
   const { apiFetch } = useAuth();
   const [posts, setPosts] = useState<PostSummary[]>();
   const [postId, setPostId] = useState('');
@@ -230,7 +270,9 @@ function SelectedPhoto({ asset, assets, onSource, save }: {
     setBusy(true);
     setError('');
     try {
-      const blob = await (await fetch(url)).blob();
+      const original = await apiFetch(`/api/visual/assets/${asset.id}/image`);
+      if (!original.ok) return setError(await readError(original));
+      const blob = await original.blob();
       const response = await apiFetch(`/api/posts/${postId}/media/practice`, { method: 'POST', body: blob });
       if (!response.ok) return setError(await readError(response));
       setMessage(postId);
@@ -238,9 +280,9 @@ function SelectedPhoto({ asset, assets, onSource, save }: {
     finally { setBusy(false); }
   }
 
-  return <div className="space-y-4">
+  return <div id="photo-editor" className="space-y-4">
     {source && <button className="text-sm font-semibold underline underline-offset-4" type="button" onClick={() => onSource(source.id)}>Open source: {source.label}</button>}
-    {url ? <PhotoEditor url={url} save={save} /> : <p role="status">{url === null ? 'Photo unavailable.' : 'Loading image…'}</p>}
+    {url ? <PhotoEditor url={url} save={(replaySource ?? asset).owned === false ? undefined : save} assetId={replaySource ? replaySource.id : asset.id} initialRecipe={suggested ?? (replaySource ? asset.edits ?? undefined : undefined)} initialPrompt={initialPrompt} /> : <p role="status">{url === null ? 'Photo unavailable.' : 'Loading image…'}</p>}
     {__MOCK_AUTH__ && url && <div className="flex flex-wrap items-end gap-2 border-t border-studio-linen pt-3">
       {!posts ? <button type="button" className={secondaryButtonClass} onClick={() => void loadPosts()}>Choose a draft to attach this version</button>
         : posts.length ? <>
@@ -259,11 +301,13 @@ function SelectedPhoto({ asset, assets, onSource, save }: {
 }
 
 export function VisualStudio() {
+  const [params] = useSearchParams();
   return <div className="space-y-5">
     <header>
       <h1 className="text-4xl font-semibold">Visual Studio</h1>
       <p className="mt-1 text-sm text-studio-muted">Prepare photographs, compare adjustments, and save edited versions.</p>
     </header>
-    <VisualWorkspace />
+    <VisualWorkspace initialAssetId={params.get('asset') ?? undefined} />
+    <VisualStandards />
   </div>;
 }

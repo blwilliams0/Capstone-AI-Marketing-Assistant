@@ -17,7 +17,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     { to: '/assistant', label: 'AI Advisor', needs: 'assistant.use' },
     { to: '/knowledge', label: 'Brand Studio', needs: 'knowledge.view' },
     { to: '/visual', label: 'Visual Studio', needs: 'content.draft' },
-    { to: '/feed-planner', label: 'Feed Planner', needs: 'content.draft' },
+    { to: '/feed-planner', label: 'Feed Preview', needs: 'content.draft' },
     { to: '/posts', label: 'Content', needs: 'content.view' },
     { to: '/calendar', label: 'Marketing Calendar', needs: 'content.view' },
     { to: '/photo-guide', label: 'Photo Guide', needs: 'content.view' },

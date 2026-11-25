@@ -1,4 +1,5 @@
-import { Link } from 'react-router';
+import { AdvisorFeedback, AdvisorPreferences } from '../visual/AdvisorMemory';
+import { Link, useLocation } from 'react-router';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { KNOWLEDGE_KIND_LABELS, type AskResponse, type AssistantStatus, type KnowledgeKind, type SourceRef } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
@@ -28,12 +29,14 @@ const EXAMPLES = [
 const kindName = (k: string) => KNOWLEDGE_KIND_LABELS[k as KnowledgeKind]?.name ?? k;
 
 export function Assistant() {
+  const location = useLocation();
+  const handoff = location.state as { question?: string; assetId?: string } | null;
   const { apiFetch, me } = useAuth();
   const canDraft = me?.capabilities.includes('content.draft') ?? false;
   const [status, setStatus] = useState<AssistantStatus | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
-  const [question, setQuestion] = useState('');
+  const [question, setQuestion] = useState(handoff?.assetId ? '' : handoff?.question ?? '');
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,11 +208,13 @@ export function Assistant() {
         </form>
       </div>
 
-      {__MOCK_AUTH__ && canDraft && <details className="order-last rounded-lg border border-studio-linen bg-studio-pearl p-4 xl:col-span-2">
+      {__MOCK_AUTH__ && canDraft && <details open={handoff?.assetId ? true : undefined} className="order-last rounded-lg border border-studio-linen bg-studio-pearl p-4 xl:col-span-2">
         <summary className="cursor-pointer font-semibold">Review photos in AI Advisor</summary>
-        <div className="mt-4"><VisualWorkspace advisor /></div>
+        <div className="mt-4"><VisualWorkspace advisor initialAssetId={handoff?.assetId} initialPrompt={handoff?.assetId ? handoff.question : undefined} /></div>
       </details>}
       <aside className="self-start space-y-2 rounded-xl border border-stone-200 bg-white p-4">
+        <AdvisorPreferences />
+        {conversationId && <AdvisorFeedback key={conversationId} conversationId={conversationId} />}
         <h2 className="text-sm font-medium text-stone-600">Your recent conversations</h2>
         {history.length === 0 && <p className="text-sm text-stone-500">None yet.</p>}
         <ul className="space-y-1">

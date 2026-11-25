@@ -3,18 +3,16 @@ import type { VisualRecipe } from '@the-pocket/shared';
 export const neutralRecipe: VisualRecipe = {
   exposure: 0, warmth: 0, contrast: 0, saturation: 0, highlights: 0, shadows: 0, sharpness: 0, crop: 'original',
 };
-export const presets = [
-  { name: 'The Signature', edits: { warmth: 0.12, contrast: 0.03, saturation: -0.06, sharpness: 0.08 } },
-  { name: 'Evening at The Pocket', edits: { exposure: 0.15, warmth: 0.08, highlights: -0.22, shadows: 0.16 } },
-  { name: 'Carmel Daylight', edits: { warmth: -0.05, exposure: 0.07, highlights: -0.2, saturation: -0.04 } },
-  { name: 'Behind the Experience', edits: { contrast: 0.13, saturation: -0.09, shadows: 0.08, sharpness: 0.15 } },
-];
+export { practicePhotoPresets as presets } from '@the-pocket/shared';
 
 const ratios = { square: 1, portrait: 4 / 5, landscape: 3 / 2 };
 const clamp = (value: number) => Math.max(0, Math.min(255, value));
 
 export function renderPhoto(canvas: HTMLCanvasElement, image: HTMLImageElement, recipe: VisualRecipe, limit: number) {
-  const { naturalWidth, naturalHeight } = image;
+  const rotation = recipe.rotation ?? 0;
+  const sideways = rotation === 90 || rotation === 270;
+  const naturalWidth = sideways ? image.naturalHeight : image.naturalWidth;
+  const naturalHeight = sideways ? image.naturalWidth : image.naturalHeight;
   const ratio = recipe.crop === 'original' ? naturalWidth / naturalHeight : ratios[recipe.crop];
   const sw = Math.min(naturalWidth, naturalHeight * ratio);
   const sh = Math.min(naturalHeight, naturalWidth / ratio);
@@ -23,8 +21,13 @@ export function renderPhoto(canvas: HTMLCanvasElement, image: HTMLImageElement, 
   canvas.height = Math.max(1, Math.round(sh * scale));
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('This browser does not support canvas editing.');
-  ctx.drawImage(image, (naturalWidth - sw) / 2, (naturalHeight - sh) / 2, sw, sh, 0, 0, canvas.width, canvas.height);
-  if (Object.entries(recipe).every(([key, value]) => key === 'crop' || value === 0)) return;
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(canvas.width / sw, canvas.height / sh);
+  ctx.rotate(rotation * Math.PI / 180);
+  ctx.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2);
+  ctx.restore();
+  if (Object.entries(recipe).every(([key, value]) => key === 'crop' || key === 'rotation' || key === 'presetVersionId' || value === 0)) return;
   const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const pixels = frame.data;
   const exposure = 2 ** recipe.exposure;
@@ -60,10 +63,10 @@ export function renderPhoto(canvas: HTMLCanvasElement, image: HTMLImageElement, 
   ctx.putImageData(frame, 0, 0);
 }
 
-export function exportPhoto(image: HTMLImageElement, recipe: VisualRecipe): Promise<Blob> {
+export function exportPhoto(image: HTMLImageElement, recipe: VisualRecipe, format: 'image/png' | 'image/jpeg' = 'image/png'): Promise<Blob> {
   const canvas = document.createElement('canvas');
   renderPhoto(canvas, image, recipe, Math.max(image.naturalWidth, image.naturalHeight));
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Image export failed.')), 'image/png');
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Image export failed.')), format, 0.92);
   });
 }

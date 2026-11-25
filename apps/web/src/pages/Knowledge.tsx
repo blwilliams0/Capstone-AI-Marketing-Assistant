@@ -1,3 +1,4 @@
+import { VisualStandards } from '../visual/VisualStandards';
 import { useSearchParams } from 'react-router';
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
@@ -94,6 +95,7 @@ export function Knowledge() {
       )}
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
+      <VisualStandards propose />
 
       {adding && (
         <AddForm
