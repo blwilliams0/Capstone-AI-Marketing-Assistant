@@ -104,3 +104,40 @@ it('uses only opted-in personal preferences and accepts feedback solely for owne
     expect(await h.db.query('SELECT user_id FROM advisor_preferences')).toEqual([]);
   } finally { await h.db.close(); }
 });
+
+it('shares standalone learning text only with consent and retrieves it only after management approval', async () => {
+  const mock = createMockAiProvider();
+  const evidence: string[] = [];
+  const h = await createHarness({ ai: { ...mock, async answer(input) {
+    evidence.push(input.documents.map((doc) => doc.text).join('\n'));
+    return mock.answer(input);
+  } } });
+  try {
+    const author = await h.addUser('contributor');
+    const admin = await h.addUser('admin');
+    const post = (token: string, path: string) => request(h.app).post('/api' + path).auth(token, { type: 'bearer' });
+    const ask = () => post(author.token, '/assistant/ask').send({ question: 'How should we describe the lighting?' });
+    const first = await ask();
+    const feedback = await post(author.token, '/assistant/feedback').send({
+      conversationId: first.body.conversationId, rating: 'correction', note: 'Private fixture detail.',
+    });
+    expect(feedback.status).toBe(201);
+    const endpoint = '/assistant/feedback/' + feedback.body.id + '/propose';
+    const share = { title: 'Lighting guidance', body: 'Describe the room in plain, sensory language.', evidence: 'Reviewed in a practice writing exercise.', shareConfirmed: true };
+    expect((await post(admin.token, endpoint).send(share)).status).toBe(404);
+    expect((await post(author.token, endpoint).send({ ...share, shareConfirmed: false })).status).toBe(400);
+    const proposal = await post(author.token, endpoint).send(share);
+    expect(proposal.status).toBe(201);
+    expect((await post(author.token, endpoint).send(share)).body).toEqual(proposal.body);
+    const queue = (token: string) => request(h.app).get('/api/assistant/learnings').auth(token, { type: 'bearer' });
+    expect((await queue(author.token)).status).toBe(403);
+    expect((await queue(admin.token)).body).toEqual({ itemIds: [proposal.body.itemId] });
+    expect((await ask()).status).toBe(200);
+    expect(evidence.at(-1)).not.toContain(share.body);
+    expect((await post(admin.token, '/knowledge/versions/' + proposal.body.versionId + '/approve').send({})).status).toBe(200);
+    expect((await ask()).status).toBe(200);
+    expect(evidence.at(-1)).toContain(share.body);
+    expect(evidence.at(-1)).toContain(share.evidence);
+    expect(evidence.at(-1)).not.toContain('Private fixture detail.');
+  } finally { await h.db.close(); }
+});

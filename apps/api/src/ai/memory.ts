@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { createItemTx } from '../knowledge/service.js';
 import { advisorFeedbackSchema, advisorPreferenceSchema, defaultAdvisorPreference, type AdvisorPreference } from '@the-pocket/shared';
 import type { Db } from '@the-pocket/db';
 import type { AuthContext } from '../types.js';
@@ -55,4 +57,40 @@ export function addMemoryRoutes(router: PolicyRouter, db: Db) {
     if (!result) return res.status(404).json({ error: 'Conversation or review unavailable.' });
     return res.status(201).json(result);
   });
+
+  router.post('/assistant/feedback/:id/propose', 'knowledge.propose', async (req, res) => {
+    const validated = z.object({
+      id: z.uuid(), title: z.string().trim().min(1).max(200), body: z.string().trim().min(1).max(2000),
+      evidence: z.string().trim().max(400).optional(), shareConfirmed: z.literal(true),
+    }).safeParse({ ...req.body, id: req.params.id });
+    if (!validated.success) return res.status(400).json({ error: 'Enter standalone guidance and explicitly confirm sharing.' });
+    const actor = req.auth!;
+    const { id, title, body, evidence } = validated.data;
+    const result = await db.transaction(async (tx) => {
+      // Lock the source so retrying the same submission cannot create duplicate proposals.
+      const [source] = await tx.query(`SELECT id FROM advisor_feedback WHERE id = $1
+        AND restaurant_id = $2 AND user_id = $3 FOR UPDATE`, [id, actor.restaurantId, actor.userId]);
+      if (!source) return 'missing';
+      const [prior] = await tx.query<{ itemId: string; versionId: string }>(`SELECT details->>'itemId' AS "itemId", target_id AS "versionId"
+        FROM audit_events WHERE restaurant_id = $1 AND actor_user_id = $2 AND action = 'advisor.learning_proposed'
+          AND details->>'feedbackId' = $3`, [actor.restaurantId, actor.userId, id]);
+      if (prior) return prior;
+      const item = await createItemTx(tx, actor, { kind: 'brand_rule', title, body,
+        sourceNote: evidence ? `Staff-submitted evidence: ${evidence}` : 'Staff-submitted learning proposal' }, req.requestId);
+      await recordAudit(tx, { action: 'advisor.learning_proposed', restaurantId: actor.restaurantId, actorUserId: actor.userId,
+        targetType: 'knowledge_version', targetId: item.versionId, details: { itemId: item.itemId, feedbackId: id }, requestId: req.requestId });
+      return item;
+    });
+    if (result === 'missing') return res.status(404).json({ error: 'Feedback unavailable.' });
+    return res.status(201).json(result);
+  });
+
+  router.get('/assistant/learnings', 'brand.approve', async (req, res) => {
+    const { restaurantId } = req.auth!;
+    const entries = await db.query<{ itemId: string }>(`SELECT details->>'itemId' AS "itemId" FROM audit_events
+      WHERE restaurant_id = $1 AND action = 'advisor.learning_proposed'
+      ORDER BY created_at DESC LIMIT 100`, [restaurantId]);
+    return res.json({ itemIds: entries.map((item) => item.itemId) });
+  });
+
 }

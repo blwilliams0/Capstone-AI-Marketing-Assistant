@@ -59,7 +59,8 @@ export function AdvisorPreferences() {
 }
 
 export function AdvisorFeedback({ conversationId, reviewId }: { conversationId?: string; reviewId?: string }) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, me } = useAuth();
+  const [feedbackId, setFeedbackId] = useState<string>();
   const [rating, setRating] = useState('helpful');
   const [note, setNote] = useState('');
   const [message, setMessage] = useState('');
@@ -72,8 +73,9 @@ export function AdvisorFeedback({ conversationId, reviewId }: { conversationId?:
     try {
       const response = await apiFetch('/api/assistant/feedback', { method: 'POST', body: { conversationId, reviewId, rating, note } });
       if (!response.ok) throw new Error(await readError(response));
+      setFeedbackId(((await response.json()) as { id: string }).id);
       setNote('');
-      setMessage('Feedback recorded.');
+      setMessage('Private feedback recorded.');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not save feedback.');
     } finally { setBusy(false); }
@@ -88,6 +90,44 @@ export function AdvisorFeedback({ conversationId, reviewId }: { conversationId?:
       <label className="block">Optional note<textarea className={inputClass} value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} /></label>
       <button className={buttonClass} disabled={busy}>Record feedback</button>
       {message && <Alert kind="success">{message}</Alert>}
+      {error && <Alert kind="error">{error}</Alert>}
+    </form>
+    {feedbackId && me?.capabilities.includes('knowledge.propose') && <ShareLearning key={feedbackId} feedbackId={feedbackId} />}
+  </details>;
+}
+
+
+function ShareLearning({ feedbackId }: { feedbackId: string }) {
+  const { apiFetch } = useAuth();
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [evidence, setEvidence] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  async function share() {
+    setBusy(true);
+    setError('');
+    try {
+      const response = await apiFetch(`/api/assistant/feedback/${feedbackId}/propose`, {
+        method: 'POST', body: { title, body, evidence, shareConfirmed: confirmed },
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      setSaved(true);
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setBusy(false); }
+  }
+  if (saved) return <Alert kind="success">Learning proposed in Brand Studio for management review.</Alert>;
+  return <details className="mt-2 border-t border-studio-linen pt-2">
+    <summary className="cursor-pointer font-semibold">Propose a restaurant learning</summary>
+    <p className="my-2 text-studio-muted">Write guidance that the team can use. Brand Studio receives only the text below. Keep guest and private account details out.</p>
+    <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); void share(); }}>
+      <label className="block">Title<input className={inputClass} required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label className="block">Suggested guidance<textarea className={inputClass} required maxLength={2000} value={body} onChange={(event) => setBody(event.target.value)} /></label>
+      <label className="block">Evidence to share (optional)<textarea className={inputClass} maxLength={400} value={evidence} onChange={(event) => setEvidence(event.target.value)} /></label>
+      <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> Share this proposal with Brand Studio</label>
+      <button className={buttonClass} disabled={busy || !confirmed || !title.trim() || !body.trim()}>Share for review</button>
       {error && <Alert kind="error">{error}</Alert>}
     </form>
   </details>;

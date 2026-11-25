@@ -36,6 +36,8 @@ export function Knowledge() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [learningIds, setLearningIds] = useState<string[]>([]);
+  const [onlyLearnings, setOnlyLearnings] = useState(false);
   const [search, setSearch] = useState('');
 
   const canPropose = me?.capabilities.includes('knowledge.propose') ?? false;
@@ -46,7 +48,12 @@ export function Knowledge() {
     if (a.ok) setItems(((await a.json()) as { items: KnowledgeItemView[] }).items);
     else setError(await readError(a));
     if (b.ok) setCore((await b.json()) as BrandCore);
-  }, [apiFetch]);
+    if (canApprove) {
+      const learning = await apiFetch('/api/assistant/learnings');
+      if (learning.ok) setLearningIds(((await learning.json()) as { itemIds: string[] }).itemIds);
+      else setError(await readError(learning));
+    }
+  }, [apiFetch, canApprove]);
 
   useEffect(() => {
     void load();
@@ -67,7 +74,7 @@ export function Knowledge() {
 
   const query = search.trim().toLowerCase();
   const shown = (items ?? []).filter((item) =>
-    item.kind === kind && (!query || item.title.toLowerCase().includes(query) || item.current?.body.toLowerCase().includes(query)),
+    item.kind === kind && (!onlyLearnings || learningIds.includes(item.id)) && (!query || item.title.toLowerCase().includes(query) || item.current?.body.toLowerCase().includes(query)),
   );
   const pendingCount = (k: KnowledgeKind) => (items ?? []).filter((i) => i.kind === k && i.pending.length > 0).length;
 
@@ -96,6 +103,10 @@ export function Knowledge() {
       {error && <Alert kind="error">{error}</Alert>}
       {notice && <Alert kind="success">{notice}</Alert>}
       <VisualStandards propose />
+      {canApprove && <button type="button" className={secondaryButtonClass} aria-pressed={onlyLearnings}
+        onClick={() => { setOnlyLearnings(!onlyLearnings); setParams({ kind: 'brand_rule' }); }}>
+        {onlyLearnings ? 'Show all brand rules' : 'Review staff learning proposals'}
+      </button>}
 
       {adding && (
         <AddForm
@@ -111,7 +122,7 @@ export function Knowledge() {
           <button
             aria-pressed={k === kind}
             key={k}
-            onClick={() => setParams({ kind: k })}
+            onClick={() => { setOnlyLearnings(false); setParams({ kind: k }); }}
             className={`-mb-px border-b-2 px-3 py-2 text-sm ${k === kind ? 'border-stone-900 font-medium' : 'border-transparent text-stone-600'}`}
           >
             {KNOWLEDGE_KIND_LABELS[k].name}
