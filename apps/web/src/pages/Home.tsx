@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
-import { APPROVAL_EVENT_LABELS, POST_STATUS_LABELS, type ActivityEntry, type CalendarResponse, type NotificationsResponse, type PostSummary } from '@the-pocket/shared';
+import { Link, useNavigate } from 'react-router';
+import { APPROVAL_EVENT_LABELS, POST_STATUS_LABELS, type ActivityEntry, type CalendarResponse, type NotificationsResponse, type PostSummary, type VisualAsset } from '@the-pocket/shared';
 import { useAuth } from '../auth';
-import { Alert, Card, secondaryButtonClass } from '../ui';
+import { Alert, Card, inputClass, secondaryButtonClass } from '../ui';
 
 export const CAPABILITY_LABELS: Record<string, string> = {
   'knowledge.view': 'Read approved marketing material',
@@ -46,6 +46,19 @@ const formatDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, 
 
 export function Home() {
   const { me, apiFetch } = useAuth();
+  const navigate = useNavigate();
+  const [question, setQuestion] = useState('');
+  const [photos, setPhotos] = useState<VisualAsset[]>([]);
+  const [assetId, setAssetId] = useState('');
+  const canChoosePhoto = __MOCK_AUTH__ && me?.capabilities.includes('assistant.use') && me.capabilities.includes('content.draft');
+  useEffect(() => {
+    if (!canChoosePhoto) return;
+    let active = true;
+    void apiFetch('/api/visual/assets').then(async (res) => {
+      if (res.ok && active) setPhotos((await res.json()).assets);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [apiFetch, canChoosePhoto]);
   const [state, setState] = useState<{ data?: OverviewData; error?: boolean }>({});
   const [attempt, setAttempt] = useState(0);
   const canRead = me?.capabilities.includes('content.view') ?? false;
@@ -93,13 +106,24 @@ export function Home() {
   return (
     <div className="space-y-5">
       <header className="rounded-lg bg-studio-slate px-6 py-7 text-stone-50 sm:px-9">
-        <h1 className="text-3xl sm:text-4xl">Marketing overview</h1>
-        <p className="mt-2 text-sm text-stone-100">Welcome, {me.name}. Check what needs attention and prepare what comes next.</p>
+        <h1 className="text-3xl sm:text-4xl">Hi, {me.name?.trim().split(/\s+/)[0] || 'there'}!<br />What are we <em>cookin’</em> up today?</h1>
+        {can('assistant.use') && <form className="mt-5 space-y-2" onSubmit={(event) => {
+          event.preventDefault();
+          navigate('/assistant', { state: { question: question.trim(), assetId } });
+        }}>
+          <textarea aria-label="Ask AI Advisor" className={inputClass} placeholder="Ask me anything, or tell me what you're working on..." maxLength={2000} value={question} onChange={(event) => setQuestion(event.target.value)} />
+          {canChoosePhoto && <select aria-label="Choose a photo for the Advisor" className={`${inputClass} max-w-md`} value={assetId} onChange={(event) => setAssetId(event.target.value)}>
+            <option value="">Choose a photo for practice editing</option>
+            {photos.map((photo) => <option key={photo.id} value={photo.id}>{photo.label}</option>)}
+          </select>}
+          <button className={secondaryButtonClass} disabled={question.trim().length < 3}>Continue to AI Advisor</button>
+        </form>}
         <div className="mt-5 flex flex-wrap gap-2">
           {can('content.draft') && <Link className={secondaryButtonClass} to="/create">Create content</Link>}
-          {can('assistant.use') && <Link className={secondaryButtonClass} to="/assistant">Ask AI Advisor</Link>}
+          {can('assistant.use') && <Link className={secondaryButtonClass} to="/assistant">Brainstorm marketing ideas</Link>}
           {can('knowledge.view') && <Link className={secondaryButtonClass} to="/knowledge">Browse Brand Studio</Link>}
-          {can('content.draft') && <Link className={secondaryButtonClass} to="/visual">Open Visual Studio</Link>}
+          {can('content.draft') && <Link className={secondaryButtonClass} to="/visual">Edit a photograph</Link>}
+          {can('content.draft') && <Link className={secondaryButtonClass} to="/feed-planner">Preview our feed</Link>}
         </div>
       </header>
       {state.error && <Alert kind="error">Could not load overview. <button className="underline" onClick={() => { setState({}); setAttempt((value) => value + 1); }}>Try again</button></Alert>}

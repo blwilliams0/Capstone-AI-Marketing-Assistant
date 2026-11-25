@@ -24,9 +24,9 @@ export function StudioIdentity({ sidebar = false }: { sidebar?: boolean }) {
 /** Centered single-column page used before sign-in completes. */
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900">
-      <div className="mx-auto max-w-md px-5 py-16">
-        <header className="mb-8"><StudioIdentity /></header>
+    <div className="grid min-h-screen place-items-center bg-studio-slate px-5 py-10 text-studio-ink">
+      <div className="w-full max-w-lg rounded-xl border border-studio-linen bg-studio-pearl p-6 shadow-xl sm:p-9">
+        <header className="mb-7"><StudioIdentity /><p className="mt-4 text-sm text-studio-muted">A creative workspace for The Pocket’s team.</p></header>
         {children}
       </div>
     </div>
