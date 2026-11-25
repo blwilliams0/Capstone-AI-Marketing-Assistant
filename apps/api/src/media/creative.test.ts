@@ -29,6 +29,10 @@ it('uses only eligible visual standards and preserves the current recipe in simu
     expect((await post(employee.token, '/visual/assets').type('image/jpeg')
       .set('x-photo-id', id).set('x-photo-label', 'Fixture').send(bytes)).status).toBe(201);
 
+    const subject = randomUUID();
+    const subjectBytes = await sharp({ create: { width: 31, height: 12, channels: 3, background: 'teal' } }).png().toBuffer();
+    expect((await post(employee.token, '/visual/assets').type('image/png')
+      .set('x-photo-id', subject).set('x-photo-label', 'Subject fixture').send(subjectBytes)).status).toBe(201);
     const reference = { kind: 'reference', title: 'Side light', category: 'Atmosphere', rationale: 'Use soft window light.', assetId: id, classification: 'on_brand' };
     expect((await post(employee.token, '/visual/standards').send(reference)).status).toBe(404);
     expect((await post(employee.token, '/visual/collections').send({ kind: 'album', name: 'Samples', visibility: 'team', items: [{ assetId: id }] })).status).toBe(201);
@@ -45,20 +49,26 @@ it('uses only eligible visual standards and preserves the current recipe in simu
     expect((await post(admin.token, '/knowledge/versions/' + first.body.versionId + '/approve').send({ confirmSelfApproval: true })).status).toBe(200);
     const pending = await post(admin.token, '/visual/standards').send({ ...preset, itemId: first.body.itemId, rationale: 'Unapproved stronger warmth.', recipe: { ...neutral, warmth: 0.9 } });
     expect(pending.status).toBe(201);
-    const input = { assetId: id, request: 'Apply Window preset', currentRecipe: neutral, privacyConfirmed: true };
+    const input = { assetId: subject, request: 'Apply Window preset', currentRecipe: neutral, privacyConfirmed: true };
     expect((await post(outsider.token, '/visual/edit-advice').send(input)).status).toBe(404);
     const suggestion = await post(employee.token, '/visual/edit-advice').send(input);
     expect(suggestion.status).toBe(200);
     expect(suggestion.body).toMatchObject({ simulated: true, recipe: { warmth: 0.3, presetVersionId: first.body.versionId } });
     expect(requests[0]!.prompt).toContain('Use soft window light.');
     expect(requests[0]!.prompt).not.toContain('Unapproved stronger warmth.');
-    expect(await sharp(requests[0]!.images![0]!.bytes).metadata()).toMatchObject({ width: 34, height: 16 });
+    expect(requests[0]!.images).toHaveLength(2);
+    expect(await sharp(requests[0]!.images![0]!.bytes).metadata()).toMatchObject({ format: 'jpeg', width: 31, height: 12 });
+    expect(await sharp(requests[0]!.images![1]!.bytes).metadata()).toMatchObject({ format: 'jpeg', width: 34, height: 16 });
     const revision = await post(employee.token, '/visual/edit-advice').send({
-      ...input, request: 'a little less warm', currentRecipe: suggestion.body.recipe,
+      ...input, request: 'a little less warm', currentRecipe: suggestion.body.recipe, previousRequests: [input.request],
     });
+    expect(JSON.parse(requests[1]!.prompt).previousRequests).toEqual([input.request]);
     expect(revision.body.recipe).toMatchObject({ warmth: 0.18, crop: 'square', presetVersionId: first.body.versionId });
     expect((await post(employee.token, '/visual/edit-advice').send({ ...input, request: 'malformed fixture' })).status).toBe(422);
     expect((await post(employee.token, '/visual/edit-advice').send({ ...input, privacyConfirmed: false })).status).toBe(400);
+    await h.db.query("UPDATE visual_collections SET archived_at = now() WHERE name = 'Samples'");
+    expect((await post(employee.token, '/visual/edit-advice').send(input)).status).toBe(200);
+    expect(requests.at(-1)!.images).toHaveLength(1);
     const historical = await h.db.query<{ recipe: { warmth: number } }>('SELECT recipe FROM visual_standards WHERE version_id = $1', [first.body.versionId]);
     expect(historical[0]!.recipe.warmth).toBe(0.3);
   } finally { await h.db.close(); }

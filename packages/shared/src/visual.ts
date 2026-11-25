@@ -65,6 +65,7 @@ export type VisualCollection = Omit<z.output<typeof collectionInputSchema>, 'rev
   id: string;
   revision: number;
   editable: boolean;
+  restaurantDefault?: boolean;
 };
 
 export const practicePhotoPresets = [
@@ -79,11 +80,14 @@ export const visualEditRequestSchema = z.object({
   assetId: z.uuid(),
   request: z.string().trim().min(3).max(2000),
   currentRecipe: visualRecipeSchema,
+  previousRequests: z.array(z.string().trim().min(1).max(600)).max(3).optional(),
   privacyConfirmed: z.literal(true),
 });
 export const visualEditResultSchema = z.object({
   recipe: visualRecipeSchema,
   rationale: z.string().trim().min(1).max(1000),
+  observations: z.array(z.string().trim().min(1).max(300)).max(5).optional(),
+  verify: z.array(z.string().trim().min(1).max(300)).max(5).optional(),
 });
 export type VisualEditResult = z.infer<typeof visualEditResultSchema>;
 
@@ -110,3 +114,16 @@ export interface VisualStandard {
   classification: 'on_brand' | 'off_brand' | 'adjust' | 'inspiration' | null;
   recipe: VisualRecipe | null;
 }
+
+export const feedReviewRequestSchema = z.object({
+  photos: z.array(z.object({ assetId: z.uuid(), existingFeed: z.boolean() })).min(2).max(9)
+    .refine((photos) => new Set(photos.map((photo) => photo.assetId)).size === photos.length),
+  privacyConfirmed: z.literal(true),
+});
+
+export const feedReviewResultSchema = z.object({
+  observations: z.array(z.string().trim().min(1).max(400)).min(1).max(5),
+  suggestions: z.array(z.string().trim().min(1).max(400)).max(5),
+  uncertainty: z.string().trim().min(1).max(500),
+});
+export type FeedReviewResult = z.infer<typeof feedReviewResultSchema>;

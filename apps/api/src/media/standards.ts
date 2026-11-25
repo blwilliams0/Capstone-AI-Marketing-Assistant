@@ -67,7 +67,20 @@ export async function approvedVisualContext(db: Db, actor: AuthContext) {
     FROM visual_standards s JOIN knowledge_versions v ON v.id = s.version_id
     JOIN knowledge_items i ON i.id = v.item_id LEFT JOIN visual_assets a ON a.id = s.asset_id
     WHERE s.restaurant_id = $1 AND i.retired_at IS NULL AND v.status = 'approved'
-      AND (v.expires_at IS NULL OR v.expires_at > now()) AND (s.asset_id IS NULL OR ${visibleAsset})
+      AND (v.expires_at IS NULL OR v.expires_at > now()) AND (s.asset_id IS NULL OR (${visibleAsset} AND ${albumGrant}))
     ORDER BY CASE WHEN s.kind = 'preset' THEN 0 ELSE 1 END, v.decided_at DESC, v.id LIMIT 8`,
-  [actor.restaurantId, actor.userId, actor.role === 'admin']);
+  [actor.restaurantId, actor.userId, false]);
+}
+
+/** Images are restricted to current, on-brand standards still shared with the team. */
+export async function approvedReferenceImages(db: Db, actor: AuthContext, assetId: string, request: string) {
+  return db.query<{ versionId: string; bytes: string }>(`SELECT v.id AS "versionId", encode(a.image_bytes, 'base64') AS bytes
+    FROM visual_standards s JOIN knowledge_versions v ON v.id = s.version_id
+    JOIN knowledge_items i ON i.id = v.item_id JOIN visual_assets a ON a.id = s.asset_id
+    WHERE s.restaurant_id = $1 AND i.retired_at IS NULL AND v.status = 'approved'
+      AND s.kind = 'reference' AND s.classification = 'on_brand' AND a.id <> $4
+      AND (v.expires_at IS NULL OR v.expires_at > now()) AND ${visibleAsset} AND ${albumGrant}
+    ORDER BY ts_rank(to_tsvector('english', i.title || ' ' || s.category || ' ' || v.body), plainto_tsquery('english', $5)) DESC,
+      v.decided_at DESC, v.id LIMIT 2`,
+  [actor.restaurantId, actor.userId, false, assetId, request]);
 }

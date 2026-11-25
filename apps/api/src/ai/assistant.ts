@@ -92,11 +92,11 @@ export async function ask(
         i++;
       }
     }
-    history = history.slice(-3);
+    history = history.slice(-3).map((turn) => ({ question: turn.question.slice(0, 2000), answer: turn.answer.slice(0, 2400) }));
   }
 
   const ai = await guard(deps, actor, 'answer');
-  const docs = await buildContext(db, actor.restaurantId, input.question);
+  const docs = await buildContext(db, actor.restaurantId, input.question, undefined, history.at(-1)?.question);
   const preference = await readAdvisorPreference(db, actor);
   const question = preference.enabled
     ? `Personal response preferences (presentation only): detail=${preference.detail}; workflow=${preference.workflow}.\n\nStaff question: ${input.question}`
@@ -114,7 +114,7 @@ export async function ask(
     if (s.quotes.length < 2 && c.citedText.trim()) s.quotes.push(c.citedText.trim().slice(0, 300));
     sources.set(d.versionId, s);
   }
-  const answer = res.refused ? "The assistant can't help with that request. Try rephrasing it as a marketing question." : scrubDocumentKeys(res.text, docs) || '(No answer was returned.)';
+  const answer = res.refused ? "The assistant couldn't answer that request. You can try a different question." : scrubDocumentKeys(res.text, docs) || '(No answer was returned.)';
 
   const conversationId = await db.transaction(async (tx) => {
     let id = input.conversationId;

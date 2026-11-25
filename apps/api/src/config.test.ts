@@ -28,6 +28,15 @@ describe('configuration safety', () => {
     expect(loadConfig({ NODE_ENV: 'test', AUTH_MODE: 'mock' }).authMode).toBe('mock');
   });
 
+  it('keeps live photo advice opt-in and ignores live AI configuration in practice auth', () => {
+    const paid = { ANTHROPIC_API_KEY: 'fictional-test-key' };
+    expect(loadConfig({ ...real, ...paid }).livePhotoAdvice).toBe(false);
+    expect(loadConfig({ ...real, ...paid, AI_LIVE_PHOTO_ADVICE: 'true' }).livePhotoAdvice).toBe(true);
+    expect(loadConfig({ NODE_ENV: 'test', AUTH_MODE: 'mock', ...paid, AI_LIVE_PHOTO_ADVICE: 'true' })).toMatchObject({
+      aiMode: 'mock', livePhotoAdvice: false,
+    });
+  });
+
   it('defaults to real Supabase authentication, never mock', () => {
     expect(loadConfig({ NODE_ENV: 'development', ...real }).authMode).toBe('supabase');
   });

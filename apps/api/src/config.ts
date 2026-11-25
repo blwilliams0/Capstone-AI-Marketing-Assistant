@@ -16,6 +16,7 @@ export interface Config {
   anthropicApiKey?: string;
   aiMode: 'claude' | 'mock' | 'disabled';
   aiMonthlyBudgetUsd: number;
+  livePhotoAdvice: boolean;
 }
 
 const envSchema = z.object({
@@ -27,6 +28,7 @@ const envSchema = z.object({
   SUPABASE_SECRET_KEY: z.string().min(1).optional(),
   DATABASE_URL: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  AI_LIVE_PHOTO_ADVICE: z.enum(['true', 'false']).default('false'),
   AI_MONTHLY_BUDGET_USD: z.coerce.number().min(0).max(10_000).default(25),
 });
 
@@ -59,7 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const anthropicApiKey = e.ANTHROPIC_API_KEY?.trim() || undefined;
-  const aiMode = anthropicApiKey ? 'claude' : MOCK_ALLOWED_ENVS.includes(nodeEnv) ? 'mock' : 'disabled';
+  const aiMode = anthropicApiKey && e.AUTH_MODE !== 'mock' ? 'claude' : MOCK_ALLOWED_ENVS.includes(nodeEnv) ? 'mock' : 'disabled';
 
   return {
     nodeEnv,
@@ -71,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: e.DATABASE_URL,
     anthropicApiKey,
     aiMode,
+    livePhotoAdvice: e.AI_LIVE_PHOTO_ADVICE === 'true' && e.AUTH_MODE === 'supabase' && aiMode === 'claude',
     aiMonthlyBudgetUsd: e.AI_MONTHLY_BUDGET_USD,
   };
 }
