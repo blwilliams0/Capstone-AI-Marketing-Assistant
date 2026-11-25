@@ -142,3 +142,18 @@ Migrations 012–014 add tenant-scoped collections and memberships, versioned vi
 Collection responses include `restaurantDefault`. Default albums are restaurant-owned and editable by management. They can include photos independently shared to their audience, and do not grant additional image access. Team access is checked again for approved reference images.
 
 Edit advice accepts up to three optional prior editing instructions, each at most 600 characters. It sends the subject image, current recipe, current and prior instructions, bounded approved knowledge and visual preset metadata to the configured provider. The mock path can also receive up to two eligible on-brand reference images. A separate live subject-photo API setting, `AI_LIVE_PHOTO_ADVICE`, defaults to false and requires real auth and a configured Claude provider. Live reference image transmission requires a separate authorization mechanism and is disabled. Practice auth always selects mock AI.
+
+## Phase 3.5 practice integration
+
+| Route | Behavior |
+| --- | --- |
+| `POST /api/assistant/ask` | Optionally accepts up to three small UTF-8 TXT/CSV extracts and a privacy confirmation. Files are scoped to the owned conversation. Optional brand-review and strategy modes use the same provider and approved context. Strategy may use recent posted and upcoming approved activity. An owned and currently accessible `feedEvaluationId` can be associated durably with the conversation. |
+| `POST /api/visual/edit-advice` | Optionally accepts an owned conversation ID and uses up to four short recent messages. Requests still require subject access and photo privacy confirmation. |
+| `POST /api/visual/standards/:id/image-permission` | Allows the image owner to record or revoke permission for an exact reference version. Live inclusion also requires an active approved on-brand version, team sharing and enabled subject and reference settings. |
+| `GET /api/visual/feed-reviews` | Lists the caller's recent evaluations, restricted to snapshots whose photos the caller can still access. |
+| `POST /api/visual/feed-review` | Persists exact ordered library asset IDs, optional saved layout revision, approved visual versions, provider and validated output. The server verifies the claimed layout revision and order. Simulated only. |
+| `GET /api/assistant/learning-patterns` | Management only. Returns repeated normalized titles among explicitly shared proposals in the last 90 days. |
+| `GET /api/instagram/practice` | Reads the tenant's fictional account status and latest successful published-media metadata. Available with practice auth. |
+| `POST /api/instagram/practice` | Requires connection management permission. Connects, refreshes, simulates errors or disconnects the fictional account. Failed syncs preserve the last successful batch. |
+
+Migrations 016–018 add private document and evaluation storage, reference transmission authorization and evaluation request reservations, and the fictional account snapshot. Advisor uses selected excerpts as unverified data. At most 12 documents are retained on a conversation after a subsequent attachment write. Excerpts older than 30 days are excluded from retrieval. Expired rows in inactive threads still require a retention job.

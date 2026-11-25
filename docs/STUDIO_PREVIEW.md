@@ -61,3 +61,27 @@ Wait for the terminal to print the preview URL. The launcher checks the API befo
 To supply the authorized logo, add a transparent-background PNG at `apps/web/public/brand/the-pocket-logo.png`. Visual Studio supports private uploads, edits, and local draft attachment. To download an edited photo, choose **Prepare PNG**, then **Download PNG**. Feed Planner orders draft visuals in this browser. It displays recorded posts separately and never modifies publication dates.
 
 Phase 3's first launch applies migration 015. It keeps existing media and collections, and adds ten empty default albums per restaurant. Browse them from **At a Glance → Browse albums**. Open **Attach a photo** in the composer to select an authorized image or upload a private one. Confirm photo privacy before asking for a practice edit.
+
+## Authorized live Claude evaluation
+
+Ordinary preview still strips the Claude key and uses the existing practice data. Live evaluation requires explicit spending and credential authorization. Use fictional materials only. It uses a separate loopback-only database and media directory under `.tmp/live-evaluation`. It does not use shared Supabase or the ordinary preview's media.
+
+1. Obtain an authorized Anthropic API credential assigned to the evaluation. Keep it in your password manager, and use an approved provider-side spending limit if available.
+2. Stop the ordinary preview with **Control-C**. From the repository folder start Bash and enter the credential at the hidden prompt. The value is kept in the shell environment only.
+
+   ```bash
+   bash
+   export PATH="$(brew --prefix node@24)/bin:$PATH"
+   read -r -s -p "Authorized Anthropic key: " ANTHROPIC_API_KEY
+   printf '\n'
+   export ANTHROPIC_API_KEY
+   export POCKET_PREVIEW_LIVE_EVALUATION=true AI_EVALUATION_MAX_CALLS=5 AI_MONTHLY_BUDGET_USD=1
+   export AI_LIVE_PHOTO_ADVICE=false AI_LIVE_REFERENCE_IMAGES=false
+   POCKET_PREVIEW_PG_BIN="$(brew --prefix postgresql@17)/bin" bash scripts/preview.sh
+   ```
+
+3. Use the printed loopback address, choose a role and open **AI Advisor**. Check that it says **Live Claude evaluation is active** before submitting fictional text. Five is a persistent call cap for this isolated database. The dollar amount is a local estimated threshold, and the provider may bill failed or already in-flight requests.
+4. For authorized subject-photo tests, stop and restart with `AI_LIVE_PHOTO_ADVICE=true`. For authorized reference comparisons, also set `AI_LIVE_REFERENCE_IMAGES=true`. In Brand Studio approve an eligible on-brand photo version and have the image owner explicitly allow that version for live evaluation. Current team sharing remains required. Confirm photo privacy before each edit request.
+5. To stop, press **Control-C**, run `unset ANTHROPIC_API_KEY POCKET_PREVIEW_LIVE_EVALUATION AI_EVALUATION_MAX_CALLS AI_MONTHLY_BUDGET_USD AI_LIVE_PHOTO_ADVICE AI_LIVE_REFERENCE_IMAGES`, and start the usual preview. Advisor should say it is using practice mode. Exit the temporary Bash shell when finished.
+
+Do not put the credential in the repository, app interface or chat. These instructions were reviewed against the code and exercised with test providers. No paid request was sent.

@@ -8,7 +8,7 @@ const tokens = {} as Record<Role, string>;
 
 beforeAll(async () => {
   // This suite sends every role through every route from one test IP.
-  h = await createHarness({ rateLimits: { perIp: { max: 1000 } } });
+  h = await createHarness({ rateLimits: { perIp: { max: 1000, windowMs: 5 * 60 * 1000 } } });
   for (const role of ROLES) tokens[role] = (await h.addUser(role)).token;
 });
 

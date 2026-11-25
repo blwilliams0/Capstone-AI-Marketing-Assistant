@@ -1,6 +1,18 @@
 # Development Status
 
-## Marketing Studio Phase 3 checkpoint
+## Marketing Studio Phase 3.5 checkpoint
+
+At a Glance and Advisor accept multiple bounded UTF-8 TXT or CSV documents. Document excerpts are private, include CSV header and line information, and remain eligible for follow-up questions for 30 days. Complex quoted multiline CSV, PDF, DOCX, XLSX and OCR support remain open. The timeline does not include document chips from historical turns or user deletion controls.
+
+Directional sidebar controls preserve the saved desktop state and mobile disclosure. A controlled Chromium test observed the stirring CSS animation for pending requests and confirmed cleanup on success, error and cancellation. The CSS reduced-motion rule exists. Browser verification of that preference remains open.
+
+Feed evaluations are private and persist their exact ordered library photos, results, provider and applicable layout revision. Advisor can retain a link to an accessible evaluation across follow-ups. Photo editing can read bounded text context from an owned conversation. Durable image and recipe event linking across all tools remains open. Feed evaluations still exclude synchronized and recorded publications. Practice Instagram synchronizes fictional published metadata and handles pagination, duplicates, expiry and refresh problems. A separate read-only Meta metadata reader has isolated tests. Secure OAuth, encrypted tokens, official connection UI and imported image previews remain implementation work.
+
+Advisor has initial Brand consistency and Marketing strategy modes. Strategy can retrieve bounded approved or posted marketing activity. Brand Studio shows repeated titles from shared learning proposals. Structured brand diagnostics, image review for brand consistency, KPI integration, wider context, semantic correction clustering and extended personal preference controls remain open.
+
+The isolated opt-in live evaluation launcher uses a separate loopback-only database and reserves a database-backed call slot before contacting Claude. Photo and reference evaluation have separate flags. Live reference inclusion also requires owner permission, current brand approval and current sharing. All verification here used mocks or spies. See [preview instructions](STUDIO_PREVIEW.md) and [developer handoff](DEVELOPER_HANDOFF.md).
+
+## Earlier Phase 3 checkpoint
 
 At a Glance is the authenticated root. The shared composer sends text directly to Advisor and can start a consented practice edit on an authorized attached photo. Navigation supports expanded, icon rail and focus modes, with browser preferences scoped to the account, and a small-screen disclosure menu. The existing brand asset path and sign-in identity are preserved. The SVG bowl is used during pending AI actions and has a static reduced-motion state.
 

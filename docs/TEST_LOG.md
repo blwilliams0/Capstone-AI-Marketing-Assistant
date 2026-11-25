@@ -468,3 +468,17 @@ The browser pass did not capture a pending response long enough to verify the an
 | `npm run lint` | Passed |
 | `npm test` | 230 passed across shared (7), database (63), worker (9), and API (151) |
 | `npm run check:bundle` | Passed, 8 files checked |
+
+## Marketing Studio Phase 3.5
+
+Started from `2fe25ac`. Used isolated local PostgreSQL, fictional data, mock authentication and mock or spy providers. No paid requests or real Instagram sync were performed.
+
+Chromium verified keyboard-triggered navigation collapse and restoration after reload, selection of a CSV and TXT fixture, removing one attachment, confirming privacy and sending the CSV from At a Glance to Advisor. It also verified connecting and refreshing the fictional Instagram account, retaining media and the prior success timestamp through a simulated rate limit, and reopening a private feed evaluation after reload and using it to start an Advisor discussion.
+
+A loopback-only test proxy delayed Advisor responses independently of the application. Chromium observed that typing did not show the bowl, and that a submitted request rendered the spoon with the `studio-stir` animation. Success, a controlled 502, and cancel restored the send action. The reduced-motion CSS exists. That browser preference and mobile, Safari, macOS and live-provider quality were not exercised. The final in-memory handoff hardening was typechecked as part of the release checks.
+
+The full route matrix outgrew the default per-IP quota in its single test client. The matrix now uses a larger test-only quota. Separate rate-limit tests and production defaults are unchanged.
+
+The Meta metadata reader was tested with an injected fetcher that verified the exact pinned host and endpoint, the authorization header, cursor pagination, refusal to follow provider pagination URLs, and token-expiry mapping. The reader was never pointed at a real account.
+
+The release run passed `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` and `npm run check:bundle`. The full suite reports 235 passing tests (156 API, 63 database, 9 worker, 7 shared). A fresh run of the 14 migration tests separately confirmed RLS, revoked public privileges and migration idempotence. Bundle inspection passed for all eight files. The existing Vite large-chunk warning persists.

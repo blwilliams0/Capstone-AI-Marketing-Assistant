@@ -25,3 +25,9 @@ Repeat paired cases for casual greetings and text follow-ups, topic changes, rev
 The editor provides bounded prior instructions and an exact current recipe. Record the normalized subject dimensions and reference IDs used by each fixture. Feed evaluation passes ordered square photos and planned/existing flags. Rate lighting, repetition, brand fit and usefulness only after authorized live cases with staff review. A simulated output or a verified payload can establish isolation and protocol behavior. Neither measures answer quality or real-world marketing impact.
 
 Track acceptance and correction rates only with a clear denominator. Keep employee usefulness, adherence to approved knowledge, unsupported claims, privacy breaches, latency and cost as separate measures. Use a reviewed rubric, blind the baseline and context-enabled conditions, and retain anonymized reasoning for reviewer disagreements. Use only approved photos and an approved budget in live runs.
+
+## Phase 3.5 acceptance evidence
+
+Use the separate opt-in preview only after approval. Begin with a small fictional text batch, then separately enable subject and reference image comparisons. Capture API mode, model, latency, estimated usage and the blinded reviewer rubric. Compare the same images with and without eligible approved references. Include revoked references, shared layouts with private review history, uncertain brand claims and an indirect photo request. Score grounding, practical value, visual authenticity and uncertainty separately. Do not treat simulated output or an accepted payload as evidence of live quality.
+
+The local fixture checks verify private document persistence, old attachment exclusion, tenant boundaries, request reservation, ordered feed persistence, and fake Instagram pagination and failure handling. Pending work includes genuine model quality, guest privacy review, structured cross-tool continuity and official account synchronization.
