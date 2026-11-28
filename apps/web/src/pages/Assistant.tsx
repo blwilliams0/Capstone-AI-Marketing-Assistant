@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { KNOWLEDGE_KIND_LABELS, type AskResponse, type AssistantStatus, type KnowledgeKind, type SourceRef } from '@the-pocket/shared';
 import { readError, useAuth } from '../auth';
+import { RichText } from '../components/RichText';
 import { Alert, buttonClass, inputClass, secondaryButtonClass } from '../ui';
 
 interface Turn {
@@ -101,7 +102,7 @@ export function Assistant() {
           <div key={i} className="space-y-3">
             <p className="ml-auto max-w-prose rounded-lg bg-stone-900 px-4 py-2 text-white">{t.question}</p>
             <div className="max-w-prose rounded-lg bg-white p-4 shadow-sm ring-1 ring-stone-200">
-              <p className="whitespace-pre-wrap text-sm">{t.answer}</p>
+              <p className="whitespace-pre-wrap text-sm"><RichText text={t.answer} /></p>
               {t.sources.length > 0 ? (
                 <details className="mt-3 text-sm" open>
                   <summary className="cursor-pointer font-medium">Sources ({t.sources.length})</summary>
@@ -111,7 +112,7 @@ export function Assistant() {
                         <span className="font-medium">{s.title}</span> <span className="text-xs text-stone-500">· {kindName(s.kind)}</span>
                         {s.quotes.map((q, j) => (
                           <blockquote key={j} className="mt-1 border-l-2 border-stone-300 pl-2 text-xs text-stone-600">
-                            {q}
+                            <RichText text={q} />
                           </blockquote>
                         ))}
                       </li>
